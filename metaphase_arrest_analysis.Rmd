@@ -1,0 +1,2411 @@
+---
+title: "spo13 metaphase I arrest analysis"
+author: Lori Koch
+date: September 2023
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+# Setup
+```{r setup, include=FALSE}
+
+# Functions
+
+# TL functions
+
+colMedians <- function (df, na.rm = T) {
+  apply(df, 2, median, na.rm)
+}
+
+strsplit.extract <- function (x, split, index) {
+  x <- as.character(x)
+  x[x == ""] <- ";"
+  x <- sapply(strsplit(x, split, fixed = TRUE), "[[", index)
+  return(x)
+}
+
+#choosing number of clusters for k-means
+
+wssplot <- function(data, nc=20, seed=1234, iter.max = 10){
+  wss <- (nrow(data)-1)*sum(apply(data,2,var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] <- sum(kmeans(data, centers=i, iter.max = iter.max)$withinss)}
+  plot(1:nc, wss, type="b", xlab="Number of Clusters",
+       ylab="Within groups sum of squares")}
+
+# LK Plotting to PDF function
+
+print_plot<-function(plot,filename.pdf,width,height){
+    print(plot)
+pdf(filename.pdf, width=width, height=height) 
+print(plot)
+dev.off()
+}
+
+
+```
+
+
+# load data tables
+
+```{r,echo=F,message=F,warning=F}
+#Read data tables #####
+
+phosphos <- read.delim("/Users/lkoch/Documents/Github scripts/metaphase arrest input files/metaphase_arrest_Phospho (STY)Sites.txt")
+
+protg <- read.delim("/Users/lkoch/Documents/Github scripts/metaphase arrest input files/metaphase_arrest_proteinGroups.txt")
+
+```
+
+
+
+# rename columns
+```{r,echo=F,message=F,warning=F}
+
+#Remove reverse & contaminant #####
+
+phosphos <- subset(phosphos, Reverse != "+" & Potential.contaminant != "+")
+protg <- subset(protg, Reverse != "+" & Potential.contaminant != "+")
+
+colnames(protg)[colnames(protg) == "id"] <- "protg.id"
+colnames(phosphos)[colnames(phosphos) == "id"] <- "phosphos.id"
+
+# set col names
+
+protg_reporter_cols<-grep("Reporter.intensity.corrected...40E_N",colnames(protg),value=T)
+
+phosphos_reporter_cols<-grep("Reporter.intensity.corrected...40E_PE___1",colnames(phosphos),value=T)
+
+# copy and rename cols
+# key
+# 1= 8067 (WT) Rep1 
+# 2= 26213 (spo13) Rep1
+# 3= 32114 (spo13-m2) Rep1
+# 4= 8067 (WT) Rep2
+# 5= 26213 (spo13) Rep2
+# 6= 32114 (spo13-m2) Rep2
+# 7= 8067 (WT) Rep3
+# 8= 26213 (spo13) Rep3
+# 9= 32114 (spo13-m2) Rep3
+# 10= 8067 (WT) Rep4
+
+raw_cols<-c(paste0(c("WT","spo13","spo13m2"),"_Rep1"),paste0(c("WT","spo13","spo13m2"),"_Rep2"),paste0(c("WT","spo13","spo13m2"),"_Rep3"),"WT_Rep4")
+
+protg[,raw_cols]<-protg[,protg_reporter_cols]
+phosphos[,raw_cols]<-phosphos[,phosphos_reporter_cols]
+
+```
+
+# Make gene name col
+```{r,echo=F,message=F,warning=F}
+
+### Make gene name cols ####
+
+### #load yeast gene map table
+#I downloaded this file from https://www.uniprot.org/docs/yeast
+#I modified the original file so it only includes the table and not the heading part at the top
+
+gene.map.table <-read.csv("/Users/lkoch/Lori MS RStudio/Reference dataframes/Yeast_Uniprot2.csv")
+
+#data prep so there isn't white space and only the first gene name is in the gene column
+gene.map.table$Gene<-trimws(gene.map.table$Gene, "right")
+gene.map.table$Gene.name <- strsplit.extract(gene.map.table$Gene, ";",1)
+
+#### Create new ID columns ####
+#Create a Gene.name column in phosphos table
+
+phosphos$Gene.name <- gene.map.table$Gene.name[match(phosphos$Protein, gene.map.table$OLN)]
+
+#### Create new ID cols in the protg table ####
+#Create new Majority.protein.ID col with only FIRST (one) majority protein ID
+#for cross referencing prot between tables
+
+protg$Majority.protein.ID <- strsplit.extract(protg$Majority.protein.IDs, ";",1)
+
+#Create Gene.name col in the protg table
+protg$Gene.name <- gene.map.table$Gene.name[match(protg$Majority.protein.ID,gene.map.table$OLN)]
+```
+
+## Convert zeros to NAs
+
+```{r, echo=FALSE}
+
+# Replace zeros with NAs in reporter.cols, save in raw_cols so stats can be calc and plots made
+# reporter_cols retain zeros
+# raw_cols have zeros replaced with NAs
+
+library(data.table)
+
+protg.DT<-as.data.table(protg)
+phosphos.DT<-as.data.table(phosphos)
+
+protg.DT[,c(raw_cols) := lapply(.SD,function(x) ifelse(x==0,NA,x)), .SD=protg_reporter_cols]
+phosphos.DT[,c(raw_cols) := lapply(.SD,function(x) ifelse(x==0,NA,x)), .SD=phosphos_reporter_cols]
+
+protg<-as.data.frame(protg.DT)
+phosphos<-as.data.frame(phosphos.DT)
+
+
+# boxplots of raw data
+boxplot(log2(protg[,raw_cols]),main="raw protein",ylab="log2 intensity")
+boxplot(log2(phosphos[,raw_cols]),main="raw phosphos",ylab="log2 intensity")
+
+
+```
+
+# ColMedian Normalization
+```{r,echo=F,message=F,warning=F}
+
+# Normalization of protg and phosphos to reporter medians ####
+
+# calculate protg reporter MEDIAN intensities
+tot_med <- colMedians(protg[,raw_cols],na.rm=T)
+
+# create new column names for normalised intensities
+norm.tmt.cols <- paste0("norm_",raw_cols)
+
+## normalise protg intensities
+## by dividing by median of each reporter
+
+# # Identify the target median, which in this case is the median of the median of each experiment
+
+target_median <- median(tot_med)
+
+# # # Identify the scaling factors needed to scale each individual experiment to reach the target_med
+scaling_factors <- as.numeric( target_median / tot_med )
+
+# # Scale the TMT intensities of each experiment so the median becomes the target median
+
+protg[,norm.tmt.cols] <- sweep(protg[,raw_cols], 2, scaling_factors, FUN = "*")
+
+# # check the colMedians are now the same
+#colMedians(protg[,norm.tmt.cols])
+
+# Channel/Column norm for phosphos data: ###
+
+# calculate protg reporter MEDIAN intensities
+phos_tot_med <- colMedians(phosphos[,raw_cols],na.rm=T)
+
+# # Identify the target median, which in this case is the median of the median of each experiment
+
+phos_target_median <- median(phos_tot_med)
+
+# # # Identify the scaling factors needed to scale each individual experiment to reach the target_med
+phos_scaling_factors <- as.numeric( phos_target_median / phos_tot_med )
+
+# # Scale the TMT intensities of each experiment so the median becomes the target median
+
+phosphos[,norm.tmt.cols] <- sweep(phosphos[,raw_cols], 2, phos_scaling_factors, FUN = "*")
+
+# # check the colMedians
+#colMedians(phosphos[,norm.tmt.cols])
+
+# Boxplots of colNorm data
+boxplot(log2(protg[,norm.tmt.cols]),main="colNorm protein",ylab="log2 intensity")
+boxplot(log2(phosphos[,norm.tmt.cols]),main="colNorm phosphos",ylab="log2 intensity")
+
+```
+
+# Phos/Prot Norm
+
+```{r,echo=F,message=F,warning=F}
+
+##### New values called "stoic" for "stoichiometric" 
+
+# extract first sequence window (some phos-sites have multiple and
+# this messes up motif analysis)
+phosphos$Sequence.window <- strsplit.extract(phosphos$Sequence.window, ';', 1)
+
+#create new phos.stoic.cols 
+phos.stoic.cols <- gsub("norm","stoic", norm.tmt.cols)
+
+# data prep
+#copy protg IDs in phosphos df to new column called first.protg.id
+#this is necessary for matching protg.ids between the phosphos and protg table
+
+phosphos$first.protg.id <- strsplit.extract(phosphos$Protein.group.IDs, ';', 1)
+
+phos.stoic.temp.df <- protg[match(phosphos$first.protg.id, protg$protg.id), norm.tmt.cols]
+
+#this divides the intensity of the phosphos over the protg
+#normalized intensity then multiplies by 1000 (to get easier number)
+#This creates "stoichiometric" phos. site changes...
+
+phosphos[,phos.stoic.cols] <- mapply(function(x,y) {x/y},phosphos[,norm.tmt.cols],  phos.stoic.temp.df[,norm.tmt.cols]) * 1000
+
+# check colMedians - they are close but not the same
+#colMedians(phosphos[,phos.stoic.cols])
+
+# Plot the phos.stoic.colss (normalized to protg)
+boxplot(log2(phosphos[,phos.stoic.cols]),main="Phos/protg norm phosphos",ylab="log2 intensity")
+
+```
+
+# add gene.name_site col
+```{r, message=FALSE, warning=FALSE, echo=F}
+
+library(dplyr)
+
+phosphos<-phosphos %>%
+  mutate(gene.name_site=paste(Gene.name,Amino.acid,Positions.within.proteins,sep="-"))
+
+```
+
+# Change NAs back to Zeros
+
+```{r,echo=F,message=F,warning=F}
+
+# head(phosphos[,phosphos_reporter_cols]) # mostly zeros raw
+# head(phosphos[,phos.stoic.cols]) # all zeros are NAs
+
+protg.DT<-as.data.table(protg)
+phosphos.DT<-as.data.table(phosphos)
+
+nona_norm.tmt.cols<-paste0("nona_",norm.tmt.cols)
+nona_phos.stoic.cols<-paste0("nona_",phos.stoic.cols)
+
+# norm cols
+protg.DT[,c(nona_norm.tmt.cols) := lapply(.SD,function(x) ifelse(is.na(x),0,x)), .SD=norm.tmt.cols]
+phosphos.DT[,c(nona_phos.stoic.cols) := lapply(.SD,function(x) ifelse(is.na(x),0,x)), .SD=phos.stoic.cols]
+
+protg<-as.data.frame(protg.DT)
+phosphos<-as.data.frame(phosphos.DT)
+
+```
+
+
+# fold change between medians
+```{r,echo=F,message=F,warning=F}
+
+# nona_norm.tmt.cols[c(1,4,7,10)] # WT
+# nona_norm.tmt.cols[c(2,5,8)] # spo13
+# nona_norm.tmt.cols[c(3,6,9)] # spo13-m2
+
+protg <- protg %>%
+    mutate(WT_spo13_fc=apply(.[,nona_norm.tmt.cols],1,function(x) {median(c(x[1],x[4],x[7],x[10]))/median(c(x[2],x[5],x[8]))})) %>%
+    mutate(WT_spo13m2_fc=apply(.[,nona_norm.tmt.cols],1,function(x) {median(c(x[1],x[4],x[7],x[10]))/median(c(x[3],x[6],x[9]))})) %>%
+    mutate(spo13_spo13m2_fc=apply(.[,nona_norm.tmt.cols],1,function(x) {median(c(x[2],x[5],x[8]))/median(c(x[3],x[6],x[9]))}))
+
+
+phosphos <- phosphos %>%
+    mutate(WT_spo13_fc=apply(.[,nona_phos.stoic.cols],1,function(x) {median(c(x[1],x[4],x[7],x[10]))/median(c(x[2],x[5],x[8]))})) %>%
+    mutate(WT_spo13m2_fc=apply(.[,nona_phos.stoic.cols],1,function(x) {median(c(x[1],x[4],x[7],x[10]))/median(c(x[3],x[6],x[9]))})) %>%
+    mutate(spo13_spo13m2_fc=apply(.[,nona_phos.stoic.cols],1,function(x) {median(c(x[2],x[5],x[8]))/median(c(x[3],x[6],x[9]))}))
+
+```
+
+# t.test between samples
+
+```{r,echo=F,message=F,warning=F}
+
+# alltimes<-c("0","45","60","75","90","105","120","135","150","165")
+# 
+# # # t.tests are done in for-loop
+# pvals<-paste0("pval.",alltimes[2:10])
+
+# nona_norm.tmt.cols[c(1,4,7,10)] # WT
+# nona_norm.tmt.cols[c(2,5,8)] # spo13
+# nona_norm.tmt.cols[c(3,6,9)] # spo13-m2
+
+# note 0 v 0 will give NaN p-value
+
+# protg comparisons
+
+
+# all protg
+protg[,"WT_spo13_pval"]<-as.data.frame(apply(protg[,nona_norm.tmt.cols], 1, function(x){
+    ifelse(all(is.finite(x))&sum(x>0)>=1,t.test(x[c(1,4,7,10)],x[c(2,5,8)])$p.value,NA)}))
+# if you don't include the sum(x>0)>=1 then you get some NaN pvalues from 0v0
+
+protg[,"WT_spo13m2_pval"]<-as.data.frame(apply(protg[,nona_norm.tmt.cols], 1, function(x){
+    ifelse(all(is.finite(x))&sum(x>0)>=1,t.test(x[c(1,4,7,10)],x[c(3,6,9)])$p.value,NA)}))
+
+protg[,"spo13_spo13m2_pval"]<-as.data.frame(apply(protg[,nona_norm.tmt.cols], 1, function(x){
+    ifelse(all(is.finite(x))&sum(x>0)>=1,t.test(x[c(2,5,8)],x[c(3,6,9)])$p.value,NA)}))
+
+# all phosphos
+phosphos[,"WT_spo13_pval"]<-as.data.frame(apply(phosphos[,nona_phos.stoic.cols], 1, function(x){
+    ifelse(all(is.finite(x))&sum(x>0)>=2,t.test(x[c(1,4,7,10)],x[c(2,5,8)])$p.value,NA)})) # sum(x>0)>=1 returned 4 NaN pvalues but >=2 returned 0 #sum(is.nan(phosphos$WT_spo13_pval))
+
+phosphos[,"WT_spo13m2_pval"]<-as.data.frame(apply(phosphos[,nona_phos.stoic.cols], 1, function(x){
+    ifelse(all(is.finite(x))&sum(x>0)>=2,t.test(x[c(1,4,7,10)],x[c(3,6,9)])$p.value,NA)})) 
+
+phosphos[,"spo13_spo13m2_pval"]<-as.data.frame(apply(phosphos[,nona_phos.stoic.cols], 1, function(x){
+    ifelse(all(is.finite(x))&sum(x>0)>=2,t.test(x[c(2,5,8)],x[c(3,6,9)])$p.value,NA)})) 
+
+pvals<-grep("pval",colnames(protg),value=T)
+fcs<-grep("fc",colnames(protg),value=T)
+
+
+```
+
+# Call significance
+
+```{r,echo=F,message=F,warning=F}
+
+# add col to indiciate whether comparison is significantly different based on fold change and pvalue
+
+# there are NaN fold changes from 0/0 and Inf fold changes from 2/0 comparisons
+# there are NA pvalues from t.test(c(0,0),c(0,0)) comparisons
+# therefore there needs to be a way to indicate that the comparison between those conditions is not sig
+# I added a layer to the ifelse to first test whether thee fc and pval are finite, which NaN and Inf, NA are not
+# things with non-finite fold changes and/or pvalues are not considered sig.
+
+
+# EDIT changing the comparison labels so mutant comes first
+# WT v spo13 WT_INCR = spo13_DECR
+# WT v spo13 WT_DECR = spo13_INCR
+# WT v spo13m2 WT_INCR = spo13m2_DECR
+# WT v spo13m2 WT_DECR = spo13m2_INCR
+# LEAVE THIS AS IS
+# spo13 v spo13m2 spo13_INCR
+# spo13 v spo13m2 spo13_DECR
+
+# protg
+protg <- protg %>%
+   mutate(spo13_WT_sig=ifelse(is.finite(WT_spo13_fc)&is.finite(WT_spo13_pval),
+                              ifelse(WT_spo13_fc>1.5 & WT_spo13_pval < 0.05,"DECR",
+                                  ifelse(WT_spo13_fc<(1/1.5) & WT_spo13_pval < 0.05,"INCR","NC")),"NC")) %>%
+    mutate(spo13m2_WT_sig=ifelse(is.finite(WT_spo13m2_fc)&is.finite(WT_spo13m2_pval),
+                              ifelse(WT_spo13m2_fc>1.5 & WT_spo13m2_pval < 0.05,"DECR",
+                                  ifelse(WT_spo13m2_fc<(1/1.5) & WT_spo13m2_pval < 0.05,"INCR","NC")),"NC")) %>%
+    mutate(spo13_spo13m2_sig=ifelse(is.finite(spo13_spo13m2_fc)&is.finite(spo13_spo13m2_pval),
+                              ifelse(spo13_spo13m2_fc>1.5 & WT_spo13m2_pval < 0.05,"INCR",
+                                  ifelse(WT_spo13m2_fc<(1/1.5) & WT_spo13m2_pval < 0.05,"DECR","NC")),"NC")) %>%
+    # adjust so factor levels are all the same
+     mutate(spo13_WT_sig=factor(spo13_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+     mutate(spo13m2_WT_sig=factor(spo13m2_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+     mutate(spo13_spo13m2_sig=factor(spo13_spo13m2_sig,levels=c("NC","INCR","DECR")))
+
+# phosphos
+phosphos <- phosphos %>%
+   mutate(spo13_WT_sig=ifelse(is.finite(WT_spo13_fc)&is.finite(WT_spo13_pval),
+                              ifelse(WT_spo13_fc>1.5 & WT_spo13_pval < 0.05,"DECR",
+                                  ifelse(WT_spo13_fc<(1/1.5) & WT_spo13_pval < 0.05,"INCR","NC")),"NC")) %>%
+    mutate(spo13m2_WT_sig=ifelse(is.finite(WT_spo13m2_fc)&is.finite(WT_spo13m2_pval),
+                              ifelse(WT_spo13m2_fc>1.5 & WT_spo13m2_pval < 0.05,"DECR",
+                                  ifelse(WT_spo13m2_fc<(1/1.5) & WT_spo13m2_pval < 0.05,"INCR","NC")),"NC")) %>%
+    mutate(spo13_spo13m2_sig=ifelse(is.finite(spo13_spo13m2_fc)&is.finite(spo13_spo13m2_pval),
+                              ifelse(spo13_spo13m2_fc>1.5 & WT_spo13m2_pval < 0.05,"INCR",
+                                  ifelse(WT_spo13m2_fc<(1/1.5) & WT_spo13m2_pval < 0.05,"DECR","NC")),"NC")) %>%
+    # adjust so factor levels are all the same
+     mutate(spo13_WT_sig=factor(spo13_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+     mutate(spo13m2_WT_sig=factor(spo13m2_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+     mutate(spo13_spo13m2_sig=factor(spo13_spo13m2_sig,levels=c("NC","INCR","DECR")))
+
+```
+
+# Indicate MVs
+```{r,echo=F,message=F,warning=F}
+
+# nona_norm.tmt.cols[c(1,4,7,10)] # WT
+# nona_norm.tmt.cols[c(2,5,8)] # spo13
+# nona_norm.tmt.cols[c(3,6,9)] # spo13-m2
+
+protg <- protg %>%
+    mutate(WT.3reps=apply(.[,nona_norm.tmt.cols[c(1,4,7,10)]],1,function(x) sum(x>0)>=3)) %>% # must be detected in 3/4 reps
+    mutate(spo13.3reps=apply(.[,nona_norm.tmt.cols[c(2,5,8)]],1,function(x) sum(x>0)==3)) %>% # must be detected in 3 reps
+    mutate(spo13m2.3reps=apply(.[,nona_norm.tmt.cols[c(3,6,9)]],1,function(x) sum(x>0)==3)) %>% # must be detected in 3 reps
+    mutate(WT.2reps=apply(.[,nona_norm.tmt.cols[c(1,4,7,10)]],1,function(x) sum(x>0)>=2)) %>% # must be detected in 2/4 reps
+    mutate(spo13.2reps=apply(.[,nona_norm.tmt.cols[c(2,5,8)]],1,function(x) sum(x>0)>=2)) %>% # must be detected in 2 reps
+    mutate(spo13m2.2reps=apply(.[,nona_norm.tmt.cols[c(3,6,9)]],1,function(x) sum(x>0)>=2)) %>% # must be detected in 2 reps
+    mutate(WT.1reps=apply(.[,nona_norm.tmt.cols[c(1,4,7,10)]],1,function(x) sum(x>0)>=1)) %>% # must be detected in 1/4 reps
+    mutate(spo13.1reps=apply(.[,nona_norm.tmt.cols[c(2,5,8)]],1,function(x) sum(x>0)>=1)) %>% # must be detected in 1 reps
+    mutate(spo13m2.1reps=apply(.[,nona_norm.tmt.cols[c(3,6,9)]],1,function(x) sum(x>0)>=1)) # must be detected in 1 reps
+
+#protg %>% filter(WT.3reps==T&spo13.3reps==T&spo13m2.3reps==T) %>% nrow() #3960 proteins detected in 3 reps of all strains
+
+# filter to found in 3 reps of all strains
+protg_3reps <- protg %>% filter(WT.3reps==T & spo13.3reps==T & spo13m2.3reps==T) #3960
+                
+# Indicate MVs in phosphos
+phosphos <- phosphos %>%
+    mutate(WT.3reps=apply(.[,nona_phos.stoic.cols[c(1,4,7,10)]],1,function(x) sum(x>0)>=3)) %>% # must be detected in 3/4 reps
+    mutate(spo13.3reps=apply(.[,nona_phos.stoic.cols[c(2,5,8)]],1,function(x) sum(x>0)==3)) %>% # must be detected in 3 reps
+    mutate(spo13m2.3reps=apply(.[,nona_phos.stoic.cols[c(3,6,9)]],1,function(x) sum(x>0)==3)) %>% # must be detected in 3 reps
+mutate(WT.2reps=apply(.[,nona_phos.stoic.cols[c(1,4,7,10)]],1,function(x) sum(x>0)>=2)) %>% # must be detected in 2/4 reps
+    mutate(spo13.2reps=apply(.[,nona_phos.stoic.cols[c(2,5,8)]],1,function(x) sum(x>0)>=2)) %>% # must be detected in 2 reps
+    mutate(spo13m2.2reps=apply(.[,nona_phos.stoic.cols[c(3,6,9)]],1,function(x) sum(x>0)>=2)) %>% # must be detected in 2 reps
+    mutate(WT.1reps=apply(.[,nona_phos.stoic.cols[c(1,4,7,10)]],1,function(x) sum(x>0)>=1)) %>% # must be detected in 1/4 reps
+    mutate(spo13.1reps=apply(.[,nona_phos.stoic.cols[c(2,5,8)]],1,function(x) sum(x>0)>=1)) %>% # must be detected in 1 reps
+    mutate(spo13m2.1reps=apply(.[,nona_phos.stoic.cols[c(3,6,9)]],1,function(x) sum(x>0)>=1)) # must be detected in 1 reps
+
+    
+# phosphos %>% filter(WT.3reps==T&spo13.3reps==T&spo13m2.3reps==T) %>% nrow() #8421 sites found in 3 reps of all strains
+# phosphos %>% filter(WT.2reps==T&spo13.2reps==T&spo13m2.2reps==T) %>% nrow() #8770 sites found in 2 reps of all strains
+
+# filter to found in 3 reps of all strains
+phosphos_3reps <- phosphos %>% filter(WT.3reps==T & spo13.3reps==T & spo13m2.3reps==T) # 8421
+
+# filter to found in 2/3 reps of each strains
+phosphos_2reps <- phosphos %>% filter(WT.2reps==T & spo13.2reps==T & spo13m2.2reps==T) # 8770
+
+# plot of things detected in 3 reps
+# use columnss where Zeros are filled as NAs so they are ignored when calculating spread
+boxplot(log2(protg_3reps[,norm.tmt.cols]),main="Detected in 3 reps of all strains",ylab="log2 intensity")
+boxplot(log2(phosphos_3reps[,phos.stoic.cols]),main="Detected in 3 reps of all strains",ylab="log2 intensity")
+
+# phosphos filter to high localization score
+phosphos_3reps_loc <- phosphos_3reps %>%
+  mutate(high.localiz.score=Localization.prob>0.75) %>% 
+    filter(high.localiz.score==T) #6927
+
+phosphos_2reps_loc <- phosphos_2reps %>%
+  mutate(high.localiz.score=Localization.prob>0.75) %>% 
+    filter(high.localiz.score==T) #7175
+
+# phosphos filter to only include rows with at least 1/10 >0 observation in nona_phos.stoic.cols ___1 (this excludes ___2 and ___3 sites)
+# important because it affects the total of motif matching sites
+
+
+```
+
+# filter to sig
+```{r,echo=F,message=F,warning=F}
+
+# separate dfs for each type of comparison sig
+protg_3reps_spo13_WT_sig <- protg_3reps %>%
+    filter(spo13_WT_sig!="NC")
+
+protg_3reps_spo13m2_WT_sig <- protg_3reps %>%
+    filter(spo13m2_WT_sig!="NC")
+
+protg_3reps_spo13_spo13m2_sig <- protg_3reps %>%
+    filter(spo13_spo13m2_sig!="NC")
+
+# phosphos 3 reps
+phosphos_3reps_spo13_WT_sig <- phosphos_3reps_loc %>%
+    filter(spo13_WT_sig!="NC")
+
+phosphos_3reps_spo13m2_WT_sig <- phosphos_3reps_loc %>%
+    filter(spo13m2_WT_sig!="NC")
+
+phosphos_3reps_spo13_spo13m2_sig <- phosphos_3reps_loc %>%
+    filter(spo13_spo13m2_sig!="NC")
+
+```
+
+# General numbers plots
+```{r,echo=F,message=F,warning=F}
+
+library(ggplot2)
+library(tidyr)
+library(forcats)
+
+# PROTEINS
+
+# boxplot of intensities in each sample
+# Zeros are NAs in norm.tmt.cols
+# log2(NA) is non-finite so is not included in boxplot
+# if nona_norm.tmt.cols where zeros are zeros is used, still the zeros are not plotted because log2(0)=-Inf
+
+protg_int_boxplot<-protg %>%
+    select(all_of(norm.tmt.cols)) %>%
+  pivot_longer(cols=all_of(norm.tmt.cols),names_to="sample",values_to="intensity",names_prefix="norm_") %>% select(sample,intensity) %>%
+  ggplot(aes(x=fct_inorder(sample),y=log2(intensity),fill=sample)) +
+  geom_boxplot(aes(fill=sample,alpha=0.2),position="dodge",outlier.size = 0.25, size = 0.25)+
+  theme_classic()+
+  labs(y="log2 intensity",x="")+
+  ggtitle("protg intensity")+
+theme(axis.text.x = element_text(angle=90,vjust=0.6,size=rel(1.5)),legend.position="none",axis.text.y=element_text(size=rel(1.5)),axis.title=element_text(size=rel(1.5)),plot.title=element_text(size=rel(2)))+
+  coord_flip()
+
+#barplot of numbers of detections (proteins) in each sample
+protg_count_cols<-paste0(nona_norm.tmt.cols,"_count")
+
+protg_per_samp_bar<-protg %>%
+    mutate(across(all_of(nona_norm.tmt.cols),function(x) sum(x>0),.names = "{.col}_count")) %>%
+    select(all_of(protg_count_cols)) %>%
+    head(1) %>%
+    pivot_longer(cols=protg_count_cols,values_to="number",names_to="time",names_prefix="nona_norm_") %>%
+    mutate(time=as.factor(gsub("_count","",time))) %>%
+   mutate(time=factor(fct_inorder(time),levels=c(raw_cols[1],raw_cols[6:10],raw_cols[2:5]))) %>% # matching color order of TC plots
+  ggplot(aes(x=fct_inorder(time),y=number))+
+  geom_bar(aes(fill=time),stat="identity")+
+  geom_text(aes(label=number),vjust=0.5,hjust=1.3)+
+  theme_classic()+
+  theme(legend.position="none")+
+  scale_y_continuous(expand=expansion(mult=c(0,0.1)),limits=c(0,4200))+
+  labs(y="",x="",title="proteins per sample")+
+  coord_flip()
+
+    
+# barplot number of proteins in 1/2/3 replicates of each sample
+num_reps_cols<-grep("reps",colnames(protg),value=T)
+reps_count_cols<-paste0(num_reps_cols,"_count")
+
+# note colors are no longer that order but it's not worth it to mess about with that now
+protg_per_rep_cum_bar<-protg %>%
+    mutate(across(all_of(num_reps_cols),function(x) sum(x), .names= "{.col}_count")) %>%
+    select(all_of(reps_count_cols)) %>%
+    head(1) %>%
+    pivot_longer(cols=reps_count_cols,values_to="number",names_to="sample") %>%
+    mutate(sample=gsub("_count","",sample)) %>%
+   #mutate(sample=factor(sample,levels=c(raw_cols[1],raw_cols[6:10],raw_cols[2:5]))) %>%
+  ggplot(aes(x=fct_inorder(sample),y=number))+
+  geom_bar(aes(fill=sample),stat="identity")+
+  geom_text(aes(label=number),vjust=0.5,hjust=1.3)+
+  theme_classic()+
+  theme(legend.position="none")+
+  scale_y_continuous(expand=expansion(mult=c(0,0.1)),limits=c(0,4200))+
+  labs(y="",x="",title="cumulative number of proteins in replicates")+
+  coord_flip()
+
+# number of proteins in all 3 strains in 3/2/1 reps
+all_strains_reps_cols<-c("all_strains_3reps","all_strains_2reps","all_strains_1reps")
+all_strains_reps_cols_count<-paste0(all_strains_reps_cols,"_count")
+
+protg_all_strains_cum_bar<-protg %>%
+    mutate(all_strains_3reps=WT.3reps&spo13.3reps&spo13m2.3reps) %>%
+    mutate(all_strains_2reps=WT.2reps&spo13.2reps&spo13m2.2reps) %>%
+    mutate(all_strains_1reps=WT.1reps&spo13.1reps&spo13m2.1reps) %>%
+    select(all_of(all_strains_reps_cols)) %>%
+    mutate(across(all_of(all_strains_reps_cols),function(x) sum(x),.names="{.col}_count")) %>%
+    select(all_of(all_strains_reps_cols_count)) %>%
+    head(1) %>%
+    pivot_longer(cols=all_of(all_strains_reps_cols_count),values_to="number",names_to="sample") %>%
+    mutate(sample=gsub("_count","",sample)) %>%
+   #mutate(sample=factor(sample,levels=c(raw_cols[1],raw_cols[6:10],raw_cols[2:5]))) %>%
+  ggplot(aes(x=fct_inorder(sample),y=number))+
+  geom_bar(aes(fill=sample),stat="identity")+
+  geom_text(aes(label=number),vjust=0.5,hjust=1.3)+
+  theme_classic()+
+  theme(legend.position="none")+
+  scale_y_continuous(expand=expansion(mult=c(0,0.1)),limits=c(0,4000))+
+  labs(y="",x="",title="cumulative number of proteins in replicates")+
+  coord_flip()
+
+    
+    
+### PHOSPHO-SITES ####
+# boxplot of intensities in each sample
+# Zeros are NAs in norm.tmt.cols
+# log2(NA) is non-finite so is not included in boxplot
+# if nona_norm.tmt.cols where zeros are zeros is used, still the zeros are not plotted because log2(0)=-Inf
+
+phos_int_boxplot<-phosphos %>%
+    mutate(high.localiz.score=Localization.prob>0.75) %>% 
+    filter(high.localiz.score==T) %>%
+    select(all_of(phos.stoic.cols)) %>%
+  pivot_longer(cols=all_of(phos.stoic.cols),names_to="sample",values_to="intensity",names_prefix="stoic_") %>% select(sample,intensity) %>%
+  ggplot(aes(x=fct_inorder(sample),y=log2(intensity),fill=sample)) +
+  geom_boxplot(aes(fill=sample,alpha=0.2),position="dodge",outlier.size = 0.25, size = 0.25)+
+  theme_classic()+
+  labs(y="log2 intensity",x="")+
+  ggtitle("phospho-sites intensity")+
+    theme(axis.text.x = element_text(angle=90,vjust=0.6,size=rel(1.5)),legend.position="none",axis.text.y=element_text(size=rel(1.5)),axis.title=element_text(size=rel(1.5)),plot.title=element_text(size=rel(2)))+
+  coord_flip()
+
+#barplot of numbers of detections (sites) in each sample
+phos_count_cols<-paste0(nona_phos.stoic.cols,"_count")
+
+phos_per_samp_bar<-phosphos %>%
+    mutate(high.localiz.score=Localization.prob>0.75) %>% 
+    filter(high.localiz.score==T) %>%
+    mutate(across(all_of(nona_phos.stoic.cols),function(x) sum(x>0),.names = "{.col}_count")) %>%
+    select(all_of(phos_count_cols)) %>%
+    head(1) %>%
+    pivot_longer(cols=phos_count_cols,values_to="number",names_to="time",names_prefix="nona_stoic_") %>%
+   mutate(time=as.factor(gsub("_count","",time))) %>%
+   mutate(time=factor(fct_inorder(time),levels=c(raw_cols[1],raw_cols[6:10],raw_cols[2:5]))) %>% # matching color order of TC plots
+  ggplot(aes(x=fct_inorder(time),y=number))+
+  geom_bar(aes(fill=time),stat="identity")+
+  geom_text(aes(label=number),vjust=0.5,hjust=1.3)+
+  theme_classic()+
+  theme(legend.position="none")+
+  scale_y_continuous(expand=expansion(mult=c(0,0.2)),limits=c(0,7500))+
+  labs(y="",x="",title="sites per sample")+
+  coord_flip()
+    
+# barplot number of proteins in 1/2/3 replicates of each sample
+num_reps_cols_phos<-grep("reps",colnames(phosphos),value=T)
+reps_count_cols_phos<-paste0(num_reps_cols_phos,"_count")
+
+# note colors are no longer that order but it's not worth it to mess about with that now
+phos_per_rep_cum_bar<-phosphos %>%
+    mutate(high.localiz.score=Localization.prob>0.75) %>% 
+    filter(high.localiz.score==T) %>%
+    mutate(across(all_of(num_reps_cols_phos),function(x) sum(x), .names= "{.col}_count")) %>%
+    select(all_of(reps_count_cols_phos)) %>%
+    head(1) %>%
+    pivot_longer(cols=reps_count_cols_phos,values_to="number",names_to="sample") %>%
+    mutate(sample=gsub("_count","",sample)) %>%
+   #mutate(sample=factor(sample,levels=c(raw_cols[1],raw_cols[6:10],raw_cols[2:5]))) %>%
+  ggplot(aes(x=fct_inorder(sample),y=number))+
+  geom_bar(aes(fill=sample),stat="identity")+
+  geom_text(aes(label=number),vjust=0.5,hjust=1.3)+
+  theme_classic()+
+  theme(legend.position="none")+
+  scale_y_continuous(expand=expansion(mult=c(0,0.2)),limits=c(0,7500))+
+  labs(y="",x="",title="cumulative number of sites in replicates")+
+  coord_flip()
+
+# number of sites in all 3 strains in 3/2/1 reps
+all_strains_reps_cols<-c("all_strains_3reps","all_strains_2reps","all_strains_1reps")
+all_strains_reps_cols_count<-paste0(all_strains_reps_cols,"_count")
+
+phos_all_strains_cum_bar<-phosphos %>%
+    mutate(high.localiz.score=Localization.prob>0.75) %>% 
+    filter(high.localiz.score==T) %>%
+    mutate(all_strains_3reps=WT.3reps&spo13.3reps&spo13m2.3reps) %>%
+    mutate(all_strains_2reps=WT.2reps&spo13.2reps&spo13m2.2reps) %>%
+    mutate(all_strains_1reps=WT.1reps&spo13.1reps&spo13m2.1reps) %>%
+    select(all_of(all_strains_reps_cols)) %>%
+    mutate(across(all_of(all_strains_reps_cols),function(x) sum(x),.names="{.col}_count")) %>%
+    select(all_of(all_strains_reps_cols_count)) %>%
+    head(1) %>%
+    pivot_longer(cols=all_of(all_strains_reps_cols_count),values_to="number",names_to="sample") %>%
+    mutate(sample=gsub("_count","",sample)) %>%
+   #mutate(sample=factor(sample,levels=c(raw_cols[1],raw_cols[6:10],raw_cols[2:5]))) %>%
+  ggplot(aes(x=fct_inorder(sample),y=number))+
+  geom_bar(aes(fill=sample),stat="identity")+
+  geom_text(aes(label=number),vjust=0.5,hjust=1.3)+
+  theme_classic()+
+  theme(legend.position="none")+
+  scale_y_continuous(expand=expansion(mult=c(0,0.1)),limits=c(0,7500))+
+  labs(y="",x="",title="cumulative number of sites in replicates")+
+  coord_flip()
+
+print_plot(protg_int_boxplot,
+           "Exp40E_protg_int_boxplot.pdf",6,5)
+
+print_plot(protg_per_samp_bar,
+           "Exp40E_protg_per_samp_bar.pdf",6,5)
+
+print_plot(protg_per_rep_cum_bar,
+           "Exp40E_protg_per_rep_cum_bar.pdf",6,5)
+
+print_plot(protg_all_strains_cum_bar,
+           "Exp40E_protg_all_strains_cum_bar.pdf",6,5)
+
+print_plot(phos_int_boxplot,
+           "Exp40E_phos_int_boxplot.pdf",6,5)
+
+print_plot(phos_per_samp_bar,
+           "Exp40E_phos_per_samp_bar.pdf",6,5)
+
+print_plot(phos_per_rep_cum_bar,
+           "Exp40E_phos_per_rep_cum_bar.pdf",6,5)
+
+print_plot(phos_all_strains_cum_bar,
+           "Exp40E_phos_all_strains_cum_bar.pdf",6,5)
+
+```
+
+
+# pie charts of sig changes in each comparison
+```{r,echo=F,message=F,warning=F}
+
+library(ggrepel)
+
+# protg WT v spo13
+protg_spo13_WT_sig_pie <- protg_3reps %>% 
+    group_by(spo13_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I spo13 v WT proteins")+
+    theme(legend.title=element_blank())
+
+# protg WT v spo13m2
+protg_spo13m2_WT_sig_pie <- protg_3reps %>% 
+    group_by(spo13m2_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13m2_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I spo13m2 v WT proteins")+
+    theme(legend.title=element_blank())
+
+# protg spo13 v spo13m2
+protg_spo13_spo13m2_sig_pie <- protg_3reps %>% 
+    group_by(spo13_spo13m2_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_spo13m2_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I spo13 v spo13m2 proteins")+
+    theme(legend.title=element_blank())
+
+
+# phosphos WT v spo13
+phosphos_spo13_WT_sig_pie <- phosphos_3reps_loc %>% 
+    group_by(spo13_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I spo13 v WT sites")+
+    theme(legend.title=element_blank())
+
+# phosphos WT v spo13m2
+phosphos_spo13m2_WT_sig_pie <- phosphos_3reps_loc %>% 
+    group_by(spo13m2_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13m2_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I spo13m2 v WT sites")+
+    theme(legend.title=element_blank())
+
+# phosphos spo13 v spo13m2
+phosphos_spo13_spo13m2_sig_pie <- phosphos_3reps_loc %>% 
+    group_by(spo13_spo13m2_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_spo13m2_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I spo13 v spo13m2 sites")+
+    theme(legend.title=element_blank())
+
+library(patchwork)
+
+
+print_plot(protg_spo13_WT_sig_pie+protg_spo13m2_WT_sig_pie+protg_spo13_spo13m2_sig_pie,
+           "protg_sig_cat_pies.pdf",12,4)
+print_plot(phosphos_spo13_WT_sig_pie+phosphos_spo13m2_WT_sig_pie+phosphos_spo13_spo13m2_sig_pie,
+           "phosphos_sig_cat_pies.pdf",12,4)
+
+
+```
+
+# MOTIFS of all sigdiff sites
+```{r,echo=F,message=F,warning=F}
+
+library(ggseqlogo)
+
+# all sig sites
+# spo13 v WT 
+spo13_WT_allsig_logo<-ggseqlogo(substr(phosphos_3reps_loc %>% filter(spo13_WT_sig!="NC") %>% select(Sequence.window) %>% unlist(),11,21),method="prob") +
+    ggtitle(paste0("spo13 v WT sigdiff sites, n=",phosphos_3reps_loc %>% filter(spo13_WT_sig!="NC") %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# spo13m2 v WT 
+spo13m2_WT_allsig_logo<-ggseqlogo(substr(phosphos_3reps_loc %>% filter(spo13m2_WT_sig!="NC") %>% select(Sequence.window) %>% unlist(),11,21),method="prob") +
+    ggtitle(paste0("spo13m2 v WT sigdiff sites, n=",phosphos_3reps_loc %>% filter(spo13m2_WT_sig!="NC") %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# spo13 v spo13m2 
+spo13_spo13m2_allsig_logo<-ggseqlogo(substr(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig!="NC") %>% select(Sequence.window) %>% unlist(),11,21),method="prob") +
+    ggtitle(paste0("spo13 v spo13m2 sigdiff sites, n=",phosphos_3reps_loc %>% filter(spo13_spo13m2_sig!="NC") %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# print logos to pdf
+print_plot(spo13_WT_allsig_logo,"spo13_WT_allsig_logo.pdf",6,4)
+print_plot(spo13m2_WT_allsig_logo,"spo13m2_WT_allsig_logo.pdf",6,4)
+print_plot(spo13_spo13m2_allsig_logo,"spo13_spo13m2_allsig_logo.pdf",6,4)
+```
+
+# sigcat seqs excel
+```{r,echo=F,message=F,warning=F}
+# export seq lists for each category
+
+library(openxlsx)
+
+# Seq Lists used to make IceLogos
+# single sheet with different columns for each sigdiff category
+
+phos_sig_cat_seq_dfs<-list()
+phos_sig_cat_seq_dfs[[1]]<-phosphos_3reps_loc %>%
+   mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+   # mutate(spo13_WT_sig=factor(spo13_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+    arrange(spo13_WT_sig) %>%
+    group_by(spo13_WT_sig) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=spo13_WT_sig,values_from=Sequence.window_5,id_cols=id) %>%
+    select(-id)
+phos_sig_cat_seq_dfs[[2]]<-phosphos_3reps_loc %>%
+   mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+   # mutate(spo13m2_WT_sig=factor(spo13m2_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+    arrange(spo13m2_WT_sig) %>%
+    group_by(spo13m2_WT_sig) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=spo13m2_WT_sig,values_from=Sequence.window_5,id_cols=id) %>%
+    select(-id)
+phos_sig_cat_seq_dfs[[3]]<-phosphos_3reps_loc %>%
+   mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+   #mutate(spo13_spo13m2_sig=factor(spo13_spo13m2_sig,levels=c("NC","INCR","DECR"))) %>%
+    arrange(spo13_spo13m2_sig) %>%
+    group_by(spo13_spo13m2_sig) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=spo13_spo13m2_sig,values_from=Sequence.window_5,id_cols=id) %>%
+    select(-id)
+
+names(phos_sig_cat_seq_dfs)<-c("spo13_WT_sig","spo13m2_WT_sig","spo13_spo13m2_sig")
+
+write.xlsx(phos_sig_cat_seq_dfs,file="MetaphaseI_sig_cat_seqs.xlsx")
+
+```
+
+# MOTIFS of INCR/DECR sites
+
+```{r,echo=F,message=F,warning=F}
+
+# INCR
+# spo13 v WT
+spo13_WT_INCR_logo<-ggseqlogo(substr(phosphos_3reps_loc %>% filter(spo13_WT_sig=="INCR") %>% select(Sequence.window) %>% unlist(),11,21),method="prob") +
+    ggtitle(paste0("spo13 v WT INCR sites, n=",phosphos_3reps_loc %>% filter(spo13_WT_sig=="INCR") %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# spo13m3 v WT
+spo13m2_WT_INCR_logo<-ggseqlogo(substr(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="INCR") %>% select(Sequence.window) %>% unlist(),11,21),method="prob") +
+    ggtitle(paste0("spo13m2 v WT INCR sites, n=",phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="INCR") %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# spo13 v spo13m2
+spo13_spo13m2_INCR_logo<-ggseqlogo(substr(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR") %>% select(Sequence.window) %>% unlist(),11,21),method="prob") +
+    ggtitle(paste0("spo13 v spo13m2 INCR sites, n=",phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR") %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# DECR
+# spo13 v WT
+spo13_WT_DECR_logo<-ggseqlogo(substr(phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR") %>% select(Sequence.window) %>% unlist(),11,21),method="prob") +
+    ggtitle(paste0("spo13 v WT DECR sites, n=",phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR") %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# spo13m2 v WT
+spo13m2_WT_DECR_logo<-ggseqlogo(substr(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR") %>% select(Sequence.window) %>% unlist(),11,21),method="prob") +
+    ggtitle(paste0("spo13m2 v WT DECR sites, n=",phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR") %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# spo13 v spo13m2
+spo13_spo13m2_DECR_logo<-ggseqlogo(substr(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR") %>% select(Sequence.window) %>% unlist(),11,21),method="prob") +
+    ggtitle(paste0("spo13 v spo13m2 DECR sites, n=",phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR") %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# print logos to pdf
+print_plot(spo13_WT_INCR_logo,"spo13_WT_INCR_logo.pdf",6,4)
+print_plot(spo13m2_WT_INCR_logo,"spo13m2_WT_INCR_logo.pdf",6,4)
+print_plot(spo13_spo13m2_INCR_logo,"spo13_spo13m2_INCR_logo.pdf",6,4)
+print_plot(spo13_WT_DECR_logo,"spo13_WT_DECR_logo.pdf",6,4)
+print_plot(spo13m2_WT_DECR_logo,"spo13m2_WT_DECR_logo.pdf",6,4)
+print_plot(spo13_spo13m2_DECR_logo,"spo13_spo13m2_3reps_DECR_logo.pdf",6,4)
+
+```
+
+# Sub DEN.ST sites surroundings logos
+```{r,echo=F,message=F,warning=F}
+
+# All DEN POLO sites
+
+# spo13 v WT
+# all sig
+spo13_WT_allsig_polo_logo<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig!="NC") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13 v WT all sig sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig!="NC"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# incr
+spo13_WT_INCR_polo_logo<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="INCR") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13 v WT INCR sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="INCR"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# decr
+spo13_WT_DECR_polo_logo<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="DECR") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13 v WT DECR sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="DECR"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# spo13m2 v WT ######
+# all sig
+spo13m2_WT_allsig_polo_logo<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig!="NC") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13m2 v WT all sig sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig!="NC"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# incr
+spo13m2_WT_INCR_polo_logo<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="INCR") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13m2 v WT INCR sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="INCR"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# decr
+spo13m2_WT_DECR_polo_logo<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="DECR") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13m2 v WT DECR sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="DECR"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# spo13 v spo13m2 ######
+# all sig
+spo13_spo13m2_allsig_polo_logo<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_spo13m2_sig!="NC") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13 v spo13m2 all sig sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_spo13m2_sig!="NC"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# incr
+spo13_spo13m2_INCR_polo_logo<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_spo13m2_sig=="INCR") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13 v spo13m2 INCR sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_spo13m2_sig=="INCR"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+# decr
+spo13_spo13m2_DECR_polo_logo<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_spo13m2_sig=="DECR") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13 v spo13m2 DECR sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_spo13m2_sig=="DECR"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+
+# print logos to pdf
+# all 9 logos in 1 graphic (can be broken up in illustrator later)
+print_plot((spo13_WT_allsig_polo_logo+spo13m2_WT_allsig_polo_logo+spo13_spo13m2_allsig_polo_logo)/
+               (spo13_WT_INCR_polo_logo+spo13m2_WT_INCR_polo_logo+spo13_spo13m2_INCR_polo_logo)/
+               (spo13_WT_DECR_polo_logo+spo13m2_WT_DECR_polo_logo+spo13_spo13m2_DECR_polo_logo),
+           "DEN_Polo_sites_logos.pdf",14,8)
+
+# export sub DEN-ST site seq lists
+
+# Seq Lists used to make IceLogos
+# single sheet with different columns for each sigdiff category
+
+DEN.ST_phos_sig_cat_seq_dfs<-list()
+DEN.ST_phos_sig_cat_seq_dfs[[1]]<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+   mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+    arrange(spo13_WT_sig) %>%
+    group_by(spo13_WT_sig) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=spo13_WT_sig,values_from=Sequence.window_5,id_cols=id) %>%
+    select(-id)
+DEN.ST_phos_sig_cat_seq_dfs[[2]]<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+   mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+    arrange(spo13m2_WT_sig) %>%
+    group_by(spo13m2_WT_sig) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=spo13m2_WT_sig,values_from=Sequence.window_5,id_cols=id) %>%
+    select(-id)
+DEN.ST_phos_sig_cat_seq_dfs[[3]]<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+   mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+    arrange(spo13_spo13m2_sig) %>%
+    group_by(spo13_spo13m2_sig) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=spo13_spo13m2_sig,values_from=Sequence.window_5,id_cols=id) %>%
+    select(-id)
+
+names(DEN.ST_phos_sig_cat_seq_dfs)<-c("spo13_WT_sig","spo13m2_WT_sig","spo13_spo13m2_sig")
+
+write.xlsx(DEN.ST_phos_sig_cat_seq_dfs,file="MetaphaseI_sub_DEN.ST_sig_cat_seqs.xlsx")
+
+
+# Pie charts of proportion of sig-cat sites that are canonical Polo motif
+
+DEN.ST_phosphos_spo13_WT_sig_pie <- phosphos_3reps_loc %>% 
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    group_by(spo13_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I [DEN].[ST]* spo13 v WT sites")+
+    theme(legend.title=element_blank())
+
+# phosphos WT v spo13m2
+DEN.ST_phosphos_spo13m2_WT_sig_pie <- phosphos_3reps_loc %>% 
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    group_by(spo13m2_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13m2_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I [DEN].[ST]* spo13m2 v WT sites")+
+    theme(legend.title=element_blank())
+
+# phosphos spo13 v spo13m2
+DEN.ST_phosphos_spo13_spo13m2_sig_pie <- phosphos_3reps_loc %>% 
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    group_by(spo13_spo13m2_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_spo13m2_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I [DEN].[ST]* spo13 v spo13m2 sites")+
+    theme(legend.title=element_blank())
+
+print_plot(DEN.ST_phosphos_spo13_WT_sig_pie+DEN.ST_phosphos_spo13m2_WT_sig_pie+DEN.ST_phosphos_spo13_spo13m2_sig_pie,
+           "DEN.ST_sig_cat_phosphos_pies.pdf",12,4)
+
+```
+
+# +1F in Polo motif Pies
+```{r,echo=F,message=F,warning=F}
+
+# what proportion of sig diff sites are DEN-STF with INCR/DECR cat
+
+DEN.STF_phosphos_spo13_WT_sig_pie <- phosphos_3reps_loc %>% 
+    filter(grepl(".............[DEN].[ST]F..............",Sequence.window)) %>%
+    group_by(spo13_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I [DEN].[ST]*F spo13 v WT sites")+
+    theme(legend.title=element_blank())
+
+# phosphos WT v spo13m2
+DEN.STF_phosphos_spo13m2_WT_sig_pie <- phosphos_3reps_loc %>% 
+    filter(grepl(".............[DEN].[ST]F..............",Sequence.window)) %>%
+    group_by(spo13m2_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13m2_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I [DEN].[ST]*F spo13m2 v WT sites")+
+    theme(legend.title=element_blank())
+
+# phosphos spo13 v spo13m2
+DEN.STF_phosphos_spo13_spo13m2_sig_pie <- phosphos_3reps_loc %>% 
+    filter(grepl(".............[DEN].[ST]F..............",Sequence.window)) %>%
+    group_by(spo13_spo13m2_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_spo13m2_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I [DEN].[ST]*F spo13 v spo13m2 sites")+
+    theme(legend.title=element_blank())
+
+print_plot(DEN.STF_phosphos_spo13_WT_sig_pie+DEN.STF_phosphos_spo13m2_WT_sig_pie+DEN.STF_phosphos_spo13_spo13m2_sig_pie,
+           "DEN.STF_sig_cat_phosphos_pies.pdf",12,4)
+
+
+# of DEN sites, how many have +1F in each of comparisons
+# all sites proportion
+DEN_F_allsites_pie<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    mutate(motif=ifelse(grepl("...............[ST]F..............",Sequence.window),"F","no_F")) %>%
+    group_by(motif) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=motif,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle(paste0("+1F in DEN motif all sites n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)))))+
+    theme(legend.title=element_blank())
+
+# spo13 v WT sigdiff
+DEN_F_spo13_WT_sig_pie<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig!="NC") %>%
+    mutate(motif=ifelse(grepl("...............[ST]F..............",Sequence.window),"F","no_F")) %>%
+    group_by(motif) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=motif,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle(paste0("+1F in DEN motif spo13 v WT sig n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13_WT_sig!="NC"))))+
+    theme(legend.title=element_blank())
+
+
+# WT v spo13m2 sigdiff
+DEN_F_spo13m2_WT_sig_pie<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig!="NC") %>%
+   mutate(motif=ifelse(grepl("...............[ST]F..............",Sequence.window),"F","no_F")) %>%
+    group_by(motif) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=motif,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle(paste0("+1F in DEN motif spo13m2 v WT sig n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13m2_WT_sig!="NC"))))+
+    theme(legend.title=element_blank())
+
+# spo13 v spo13m2 sigdiff
+DEN_F_spo13_spo13m2_sig_pie<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_spo13m2_sig!="NC") %>%
+    mutate(motif=ifelse(grepl("...............[ST]F..............",Sequence.window),"F","no_F")) %>%
+    group_by(motif) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=motif,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle(paste0("+1F in DEN motif spo13 v spo13m2 sig n=",nrow(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13_spo13m2_sig!="NC"))))+
+    theme(legend.title=element_blank())
+
+# print to pdf
+print_plot((DEN_F_allsites_pie)/(DEN_F_spo13_WT_sig_pie)/(DEN_F_spo13m2_WT_sig_pie)/
+                (DEN_F_spo13_spo13m2_sig_pie),
+           "DEN.STF_out_of_DEN_pies.pdf",5,10)
+
+
+
+```
+
+## Polo fisher test barplots
+```{r,echo=F,message=F,warning=F}
+
+library(scales)
+
+fisher<-function(df1,df2,motif){
+    total.df1 <- df1 %>% nrow() 
+    total.df2 <- df2 %>% nrow()
+    match.df1 <- df1 %>% filter(grepl(motif,Sequence.window)) %>% nrow()
+    match.df2 <- df2  %>% filter(grepl(motif,Sequence.window)) %>% nrow()
+    corr.mat<-matrix(c(match.df1,(total.df1-match.df1),match.df2,(total.df2-match.df2)),
+                     nrow=2,
+                     dimnames= list(c("match","no match"),
+                                    c("df1","df2")))
+    fisher.result<-fisher.test(corr.mat)
+    
+    corr.mat<-corr.mat %>% as.data.frame() %>%
+    rbind(colSums(.)) %>%
+    cbind(rowSums(.)) %>%
+    rbind(perc_match=(.[1,]/.[3,])*100)
+    
+    rownames(corr.mat)[3]<-"col_totals"
+    colnames(corr.mat)<-c("df1","df2","row_totals")
+    
+    corr.mat<-corr.mat %>%
+        cbind("pval"=fisher.result$p.value)
+
+    
+    return(corr.mat)
+}
+
+library(ggsignif)
+
+# note "total" in this case is sites with high loc score and detected in 9/10 ___1 TMT channels (all 3 strains 3/4 WT reps)
+
+fisher_barplot<-function(df1,df2,motif,subset1,subset2,title){
+    out_df<-fisher(df1,df2,motif) %>%
+    tail(1) %>%
+     mutate(stars=ifelse(pval<0.001,"***",
+                      ifelse(pval<0.01,"**",
+                             ifelse(pval<0.05,"*",NA)))) %>%
+    select(df1,df2,pval,stars) %>%
+    pivot_longer(-c(pval,stars),values_to="perc",names_to="sample") %>%
+    mutate(sample=ifelse(grepl("df1",sample),subset1,subset2)) %>%
+        mutate(sample=factor(sample,levels=c(subset1,subset2))) # have to make sure levels are consistent
+        
+    out_df %>%
+    ggplot(aes(x=sample,y=perc,fill=sample))+
+    geom_bar(aes(fill=sample),stat="identity")+
+   geom_signif(comparisons = list(c(subset1,subset2)), 
+              map_signif_level=TRUE,
+              annotations = out_df$stars[1],
+              size=0.25)+
+    scale_y_continuous(expand=expansion(mult=c(0,0.2)),labels = label_number(accuracy=0.1))+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle=90,vjust=0.6),legend.position="none",axis.text=element_text(size=rel(1)))+
+    labs(y="percent matches",x="",title=title,,axis.line=element_line(linewidth=0.1))
+}
+
+
+# sig vs NC comparisons
+# DEN sites 3 comparisons
+spo13_WT_DEN_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_spo13_WT_sig,".............[DEN].[ST]...............","spo13_WT_NC","spo13_WT_sig","spo13 v WT [DEN].[ST]* sites")
+spo13m2_WT_DEN_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_spo13m2_WT_sig,".............[DEN].[ST]...............","spo13m2_WT_NC","spo13m2_WT_sig","spo13m2 v WT [DEN].[ST]* sites")
+spo13_spo13m2_DEN_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_spo13_spo13m2_sig,".............[DEN].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_sig","spo13 v spo13m2 [DEN].[ST]* sites")
+
+
+# DEN.STF sites 3 comparisons
+spo13_WT_DEN.STF_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_spo13_WT_sig,".............[DEN].[ST]F..............","spo13_WT_NC","spo13_WT_sig","spo13 v WT [DEN].[ST]*F sites")
+spo13m2_WT_DEN.STF_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_spo13m2_WT_sig,".............[DEN].[ST]F..............","spo13m2_WT_NC","spo13m2_WT_sig","spo13m2 v WT [DEN].[ST]*F sites")
+spo13_spo13m2_DEN.STF_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_spo13_spo13m2_sig,".............[DEN].[ST]F..............","spo13_spo13m2_NC","spo13_spo13m2_sig","spo13 v spo13m2 [DEN].[ST]*F sites")
+
+print_plot(spo13_WT_DEN_sig_v_NC_fish_bar+spo13m2_WT_DEN_sig_v_NC_fish_bar+spo13_spo13m2_DEN_sig_v_NC_fish_bar,
+           "DEN_fisher_sig_v_NC_barplot.pdf",13,8)
+
+print_plot(spo13_WT_DEN.STF_sig_v_NC_fish_bar+spo13m2_WT_DEN.STF_sig_v_NC_fish_bar+spo13_spo13m2_DEN.STF_sig_v_NC_fish_bar,
+           "DEN.STF_fisher_sig_v_NC_barplot.pdf",13,8)
+
+# DECR vs NC comparisons
+# DEN sites 3 comparisons
+spo13_WT_DEN_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),".............[DEN].[ST]...............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [DEN].[ST]* sites")
+
+spo13m2_WT_DEN_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),".............[DEN].[ST]...............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [DEN].[ST]* sites")
+
+spo13_spo13m2_DEN_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),".............[DEN].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [DEN].[ST]* sites")
+
+# DEN.STF DECR sites 3 comparisons
+spo13_WT_DEN.STF_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),".............[DEN].[ST]F..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [DEN].[ST]*F sites")
+
+spo13m2_WT_DEN.STF_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),".............[DEN].[ST]F..............","spo13m2_WT_NC","WT_spo13m2_DECR","spo13m2 v WT [DEN].[ST]*F sites")
+
+spo13_spo13m2_DEN.STF_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),".............[DEN].[ST]F..............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [DEN].[ST]*F sites")
+
+print_plot(spo13_WT_DEN_DECR_v_NC_fish_bar+spo13m2_WT_DEN_DECR_v_NC_fish_bar+spo13_spo13m2_DEN_DECR_v_NC_fish_bar,
+           "DEN_fisher_DECR_v_NC_barplot.pdf",13,8)
+
+print_plot(spo13_WT_DEN.STF_DECR_v_NC_fish_bar+spo13m2_WT_DEN.STF_DECR_v_NC_fish_bar+spo13_spo13m2_DEN.STF_DECR_v_NC_fish_bar,
+           "DEN.STF_fisher_DECR_v_NC_barplot.pdf",13,8)
+
+```
+
+## CDK site fisher test barplots
+```{r,echo=F,message=F,warning=F}
+
+
+# Pie charts of proportion of sig-cat sites that are min CDK SP/TP
+
+STP_phosphos_spo13_WT_sig_pie <- phosphos_3reps_loc %>% 
+    filter(grepl("...............[ST]P..............",Sequence.window)) %>%
+    group_by(spo13_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I [ST]*P spo13 v WT sites")+
+    theme(legend.title=element_blank())
+
+
+STP_phosphos_spo13m2_WT_sig_pie <- phosphos_3reps_loc %>% 
+    filter(grepl("...............[ST]P..............",Sequence.window)) %>%
+    group_by(spo13m2_WT_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13m2_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I [ST]*P spo13m2 v WT sites")+
+    theme(legend.title=element_blank())
+
+
+STP_phosphos_spo13_spo13m2_sig_pie <- phosphos_3reps_loc %>% 
+    filter(grepl("...............[ST]P..............",Sequence.window)) %>%
+    group_by(spo13_spo13m2_sig) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x="",y=n,fill=spo13_spo13m2_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF"))+
+    ggtitle("Metaphase I [ST]*P spo13 v spo13m2 sites")+
+    theme(legend.title=element_blank())
+
+print_plot(STP_phosphos_spo13_WT_sig_pie+STP_phosphos_spo13m2_WT_sig_pie+STP_phosphos_spo13_spo13m2_sig_pie,
+           "STP_sig_cat_phosphos_pies.pdf",12,4)
+
+
+
+######## sig vs NC comparisons #### 
+########
+# SP sites 3 comparisons
+spo13_WT_SP_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_spo13_WT_sig,"...............[ST]P..............","spo13_WT_NC","spo13_WT_sig","spo13 v WT [ST]*P sites")
+spo13m2_WT_SP_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_spo13m2_WT_sig,"...............[ST]P..............","spo13m2_WT_NC","spo13m2_WT_sig","spo13m2 v WT [ST]*P sites")
+spo13_spo13m2_SP_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_spo13_spo13m2_sig,"...............[ST]P..............","spo13_spo13m2_NC","spo13_spo13m2_sig","spo13 v spo13m2 [ST]*P sites")
+
+print_plot(spo13_WT_SP_sig_v_NC_fish_bar+spo13m2_WT_SP_sig_v_NC_fish_bar+spo13_spo13m2_SP_sig_v_NC_fish_bar,
+           "SP_fisher_sig_v_NC_barplot.pdf",13,8)
+
+
+#SP.KR sites 
+spo13_WT_SP.KR_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_spo13_WT_sig,"...............[ST]P.[KR]............","spo13_WT_NC","spo13_WT_sig","spo13 v WT [ST]*P.[KR] sites")
+spo13m2_WT_SP.KR_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_spo13m2_WT_sig,"...............[ST]P.[KR]............","spo13m2_WT_NC","spo13m2_WT_sig","spo13m2 v WT [ST]*P.[KR] sites")
+spo13_spo13m2_SP.KR_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_spo13_spo13m2_sig,"...............[ST]P.[KR]............","spo13_spo13m2_NC","spo13_spo13m2_sig","spo13 v spo13m2 [ST]*P.[KR] sites")
+
+print_plot(spo13_WT_SP.KR_sig_v_NC_fish_bar+spo13m2_WT_SP.KR_sig_v_NC_fish_bar+spo13_spo13m2_SP.KR_sig_v_NC_fish_bar,
+           "SP.KR_fisher_sig_v_NC_barplot.pdf",13,8)
+
+
+# # overlapping DEN and SP sites
+# WT_spo13_DEN.SP_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(WT_spo13_sig=="NC"),phosphos_3reps_WT_spo13_sig,".............[DEN].[ST]P..............","WT_spo13_NC","WT_spo13_sig","WT v spo13 [DEN].[ST]P sites")
+# WT_spo13m2_DEN.SP_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(WT_spo13m2_sig=="NC"),phosphos_3reps_WT_spo13m2_sig,".............[DEN].[ST]P..............","WT_spo13m2_NC","WT_spo13m2_sig","WT v spo13m2 [DEN].[ST]P sites")
+# spo13_spo13m2_DEN.SP_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_spo13_spo13m2_sig,".............[DEN].[ST]P..............","spo13_spo13m2_NC","spo13_spo13m2_sig","spo13 v spo13m2 [DEN].[ST]P sites")
+# 
+# print_plot(WT_spo13_DEN.SP_sig_v_NC_fish_bar+WT_spo13m2_DEN.SP_sig_v_NC_fish_bar+spo13_spo13m2_DEN.SP_sig_v_NC_fish_bar,
+#            "DEN.STP_fisher_sig_v_NC_barplot.pdf",13,8)
+
+######## DECR vs NC comparisons #### 
+########
+# SP sites 3 comparisons
+spo13_WT_SP_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),"...............[ST]P..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [ST]*P sites")
+spo13m2_WT_SP_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),"...............[ST]P..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [ST]*P sites")
+spo13_spo13m2_SP_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),"...............[ST]P..............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [ST]*P sites")
+
+print_plot(spo13_WT_SP_DECR_v_NC_fish_bar+spo13m2_WT_SP_DECR_v_NC_fish_bar+spo13_spo13m2_SP_DECR_v_NC_fish_bar,
+           "SP_fisher_DECR_v_NC_barplot.pdf",13,8)
+
+#SP.KR sites 
+spo13_WT_SP.KR_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),"...............[ST]P.[KR]............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [ST]*P.[KR] sites")
+spo13m2_WT_SP.KR_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),"...............[ST]P.[KR]............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [ST]*P.[KR] sites")
+spo13_spo13m2_SP.KR_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),"...............[ST]P.[KR]............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [ST]*P.[KR] sites")
+
+print_plot(spo13_WT_SP.KR_DECR_v_NC_fish_bar+spo13m2_WT_SP.KR_DECR_v_NC_fish_bar+spo13_spo13m2_SP.KR_DECR_v_NC_fish_bar,
+           "SP.KR_fisher_DECR_v_NC_barplot.pdf",13,8)
+
+
+# # overlapping DEN and SP sites
+# spo13_WT_DEN.SP_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),".............[DEN].[ST]P..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [DEN].[ST]*P sites")
+# spo13m2_WT_DEN.SP_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),".............[DEN].[ST]P..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [DEN].[ST]*P sites")
+# spo13_spo13m2_DEN.SP_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),".............[DEN].[ST]P..............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [DEN].[ST]*P sites")
+# 
+# print_plot(spo13_WT_DEN.SP_DECR_v_NC_fish_bar+spo13m2_WT_DEN.SP_DECR_v_NC_fish_bar+spo13_spo13m2_DEN.SP_DECR_v_NC_fish_bar,
+#            "DEN.STP_fisher_DECR_v_NC_barplot.pdf",13,8)
+
+
+```
+
+## RK.ST/RK..ST sites fisher barplots
+```{r,echo=F,message=F,warning=F}
+
+# RK at -2 sites 3 comparisons
+spo13_WT_RK.ST_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_spo13_WT_sig,".............[RK].[ST]...............","spo13_WT_NC","spo13_WT_sig","spo13 v WT [RK].[ST]* sites")
+spo13m2_WT_RK.ST_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_spo13m2_WT_sig,".............[RK].[ST]...............","spo13m2_WT_NC","spo13m2_WT_sig","spo13m2 v WT [RK].[ST]* sites")
+spo13_spo13m2_RK.ST_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_spo13_spo13m2_sig,".............[RK].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_sig","spo13 v spo13m2 [RK].[ST]* sites")
+
+print_plot(spo13_WT_RK.ST_sig_v_NC_fish_bar+spo13m2_WT_RK.ST_sig_v_NC_fish_bar+spo13_spo13m2_RK.ST_sig_v_NC_fish_bar,
+           "RK.ST_fisher_sig_v_NC_barplot.pdf",13,8)
+
+# RK at -3 sites 3 comparisons
+spo13_WT_RK..ST_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_spo13_WT_sig,"............[RK]..[ST]...............","spo13_WT_NC","spo13_WT_sig","spo13 v WT [RK]..[ST]* sites")
+spo13m2_WT_RK..ST_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_spo13m2_WT_sig,"............[RK]..[ST]...............","spo13m2_WT_NC","spo13m2_WT_sig","spo13m2 v WT [RK]..[ST]* sites")
+spo13_spo13m2_RK..ST_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_spo13_spo13m2_sig,"............[RK]..[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_sig","spo13 v spo13m2 [RK]..[ST]* sites")
+
+print_plot(spo13_WT_RK..ST_sig_v_NC_fish_bar+spo13m2_WT_RK..ST_sig_v_NC_fish_bar+spo13_spo13m2_RK..ST_sig_v_NC_fish_bar,
+           "RK..ST_fisher_sig_v_NC_barplot.pdf",13,8)
+
+
+# INCR v NC 
+# RK at -2
+spo13_WT_RK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="INCR"),".............[RK].[ST]...............","spo13_WT_NC","spo13_WT_INCR","spo13 v WT [RK].[ST]* sites")
+spo13m2_WT_RK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="INCR"),".............[RK].[ST]...............","spo13m2_WT_NC","spo13m2_WT_INCR","spo13m2 v WT [RK].[ST]* sites")
+spo13_spo13m2_RK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR"),".............[RK].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_INCR","spo13 v spo13m2 [RK].[ST]* sites")
+
+print_plot(spo13_WT_RK.ST_INCR_v_NC_fish_bar+spo13m2_WT_RK.ST_INCR_v_NC_fish_bar+spo13_spo13m2_RK.ST_INCR_v_NC_fish_bar,
+           "RK.ST_fisher_INCR_v_NC_barplot.pdf",13,8)
+
+# RK at -3
+spo13_WT_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="INCR"),"............[RK]..[ST]...............","spo13_WT_NC","spo13_WT_INCR","spo13 v WT [RK]..[ST]* sites")
+spo13m2_WT_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="INCR"),"............[RK]..[ST]...............","spo13m2_WT_NC","spo13m2_WT_INCR","spo13m2 v WT [RK]..[ST]* sites")
+spo13_spo13m2_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR"),"............[RK]..[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_INCR","spo13 v spo13m2 [RK]..[ST]* sites")
+
+print_plot(spo13_WT_RK..ST_INCR_v_NC_fish_bar+spo13m2_WT_RK..ST_INCR_v_NC_fish_bar+spo13_spo13m2_RK..ST_INCR_v_NC_fish_bar,
+           "RK..ST_fisher_INCR_v_NC_barplot.pdf",13,8)
+
+
+# 
+# # DEPLETION OF BASOPHILIC MOTIFS AMONG SIG INCR SITES
+# # INCR v NC #####
+# # [RK].ST
+# WT_spo13_RK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+#                                                      filter(WT_spo13_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13_sig=="INCR"),".............[RK].[ST]...............","WT_spo13_NC","WT_spo13_INCR","WT v spo13 [RK].[ST] sites")
+# WT_spo13m2_RK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+#                                                      filter(WT_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13m2_sig=="INCR"),".............[RK].[ST]...............","WT_spo13m2_NC","WT_spo13m2_INCR","WT v spo13m2 [RK].[ST] sites")
+# spo13_spo13m2_RK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+#                                                      filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR"),".............[RK].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_INCR","spo13 v spo13m2 [RK].[ST] sites")
+# 
+# print_plot(WT_spo13_RK.ST_INCR_v_NC_fish_bar+WT_spo13m2_RK.ST_INCR_v_NC_fish_bar+spo13_spo13m2_RK.ST_INCR_v_NC_fish_bar,
+#            "RK.ST_fisher_INCR_v_NC_barplot.pdf",13,8)
+# 
+# # [RK]..ST
+# WT_spo13_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+#                                                      filter(WT_spo13_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13_sig=="INCR"),"............[RK]..[ST]...............","WT_spo13_NC","WT_spo13_INCR","WT v spo13 [RK]..[ST] sites")
+# WT_spo13m2_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+#                                                      filter(WT_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13m2_sig=="INCR"),"............[RK]..[ST]...............","WT_spo13m2_NC","WT_spo13m2_INCR","WT v spo13m2 [RK]..[ST] sites")
+# spo13_spo13m2_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+#                                                      filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR"),"............[RK]..[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_INCR","spo13 v spo13m2 [RK]..[ST] sites")
+# 
+# print_plot(WT_spo13_RK..ST_INCR_v_NC_fish_bar+WT_spo13m2_RK..ST_INCR_v_NC_fish_bar+spo13_spo13m2_RK..ST_INCR_v_NC_fish_bar,
+#            "RK..ST_fisher_INCR_v_NC_barplot.pdf",13,8)
+# 
+# # RKRK.ST motif
+# WT_spo13_RKRK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(WT_spo13_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13_sig=="INCR"),"............[RK][RK].[ST]...............","WT_spo13_NC","WT_spo13_INCR","WT v spo13 [RK][RK].[ST] sites")
+# WT_spo13m2_RKRK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+#                                                          filter(WT_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13m2_sig=="INCR"),"............[RK][RK].[ST]...............","WT_spo13m2_NC","WT_spo13m2_INCR","WT v spo13m2 [RK][RK].[ST] sites")
+# spo13_spo13m2_RKRK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR"),"............[RK][RK].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_INCR","spo13 v spo13m2 [RK][RK].[ST] sites")
+# 
+# print_plot(WT_spo13_RKRK.ST_INCR_v_NC_fish_bar+WT_spo13m2_RKRK.ST_INCR_v_NC_fish_bar+spo13_spo13m2_RKRK.ST_INCR_v_NC_fish_bar,
+#            "RKRK.ST_fisher_INCR_v_NC_barplot.pdf",13,8)
+
+
+```
+
+## Polo sub-motifs fisher test barplots
+```{r,echo=F,message=F,warning=F}
+
+# +1 hydrophobic LIM or aromatic FY = [LIMFY]
+# # DECR vs NC comparisons 
+# DEN.[ST][LIMFY] sites 3 comparisons
+spo13_WT_DEN.SThyd_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),".............[DEN].[ST]*[FMYIL]..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [DEN].[ST]*[LIMFY] sites")
+spo13m2_WT_DEN.SThyd_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),".............[DEN].[ST]*[FMYIL]..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [DEN].[ST]*[LIMFY] sites")
+spo13_spo13m2_DEN.SThyd_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),".............[DEN].[ST][FMYIL]..............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [DEN].[ST]*[LIMFY] sites")
+
+print_plot(spo13_WT_DEN.SThyd_DECR_v_NC_fish_bar+spo13m2_WT_DEN.SThyd_DECR_v_NC_fish_bar+spo13_spo13m2_DEN.SThyd_DECR_v_NC_fish_bar,
+           "DEN.SThyd_fisher_DECR_v_NC_barplot.pdf",13,8)
+
+## PRK1/ARK1/AKL1 motif in spo13m2 INCR 
+# PRK= [LIM]….[ST]*G
+# ARK1= [TS]*G
+# AKL1=[LMI]..[QHM].[T]*[G]
+
+# [DEN].[ST]*G motif
+spo13_WT_DEN.STG_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),".............[DEN].[ST]G..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [DEN].[ST]*G sites")
+spo13m2_WT_DEN.STG_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),".............[DEN].[ST]G..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [DEN].[ST]*G sites")
+spo13_spo13m2_DEN.STG_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),".............[DEN].[ST]G..............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [DEN].[ST]*G sites")
+
+print_plot(spo13_WT_DEN.STG_DECR_v_NC_fish_bar+spo13m2_WT_DEN.STG_DECR_v_NC_fish_bar+spo13_spo13m2_DEN.STG_DECR_v_NC_fish_bar,
+           "DEN.STG_fisher_DECR_v_NC_barplot.pdf",13,8)
+
+# AKL1=[LMI]..[QHM].[T]*[G] --- LIM at -4
+# because I only see the +1G in DEN sites, retain DEN at -2
+# [LIM]..[DEN].[ST]G -- LIM at -4
+spo13_WT_LIM..DEN.STG_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),"..........[LIM]..[DEN].[ST]G..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [LIM]..[DEN].[ST]*G sites")
+spo13m2_WT_LIM..DEN.STG_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),"..........[LIM]..[DEN].[ST]G..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [LIM]..[DEN].[ST]*G sites")
+spo13_spo13m2_LIM..DEN.STG_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),"..........[LIM]..[DEN].[ST]G..............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [LIM]..[DEN].[ST]*G sites")
+
+
+print_plot(spo13_WT_LIM..DEN.STG_DECR_v_NC_fish_bar+spo13m2_WT_LIM..DEN.STG_DECR_v_NC_fish_bar+spo13_spo13m2_LIM..DEN.STG_DECR_v_NC_fish_bar,
+           "LIM..DEN.STG_fisher_DECR_v_NC_barplot.pdf",13,8) # no enrichment
+
+```
+   
+# regular logo of sub-Polo motifs
+```{r}
+
+ggseqlogo(substr(phosphos_3reps_spo13_WT_sig %>% filter(spo13_WT_sig=="DECR") %>% filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% select(Sequence.window) %>% unlist(),11,21),method="prob")+
+    ggtitle(paste0("spo13 v WT DECR, n=",phosphos_3reps_spo13_WT_sig %>% filter(spo13_WT_sig=="DECR") %>% filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% nrow()))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+```
+
+## Non-Polo subset logo
+```{r}
+
+phosphos_3reps_loc %>%
+    filter(!grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="DECR") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13 v WT non-[DEN]x[ST]* DECR sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(!grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="DECR"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+phosphos_3reps_loc %>%
+    filter(!grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="DECR") %>%
+    select(Sequence.window) %>% unlist() %>%
+    substr(.,11,21) %>%
+    ggseqlogo(.,method="prob")+
+    ggtitle(paste0("spo13m2 v WT non-[DEN]x[ST]* DECR sites, n=",nrow(phosphos_3reps_loc %>%
+    filter(!grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="DECR"))))+
+    theme(legend.position="none")+
+    scale_x_continuous(breaks=1:11,labels=-5:5)
+
+```
+
+
+# Fisher barplots included in main figure
+```{r}
+
+# below first set of DECR v NC icelogos
+print_plot(spo13_WT_DEN_DECR_v_NC_fish_bar+spo13m2_WT_DEN_DECR_v_NC_fish_bar+spo13_WT_SP_DECR_v_NC_fish_bar+spo13m2_WT_SP_DECR_v_NC_fish_bar,"main_fig_fisher_DECR_v_NC_barplot.pdf",8,13)
+
+# below canonical Polo sub-motif logos
+print_plot(spo13_WT_DEN.STF_DECR_v_NC_fish_bar+spo13m2_WT_DEN.STF_DECR_v_NC_fish_bar+spo13_WT_DEN.STG_DECR_v_NC_fish_bar+spo13m2_WT_DEN.STG_DECR_v_NC_fish_bar,"main_fig_sub_DEN_fisher_DECR_v_NC_barplot.pdf",8,13)
+
+```
+
+
+# Clustering of proteins most different
+```{r,echo=F,message=F,warning=F}
+
+# function to produce pheatmap of clustering results
+library(pheatmap)
+
+get_clust_heatmap<-function(df,hclustdf,cols,clusternum,strain1,strain2,title){
+    #cols<-gsub("nona_norm_","",cols)
+    hclustdf.cutree<-cutree(hclustdf,k=clusternum)
+  hclustdf.row_annots<-data.frame(cluster = as.factor(hclustdf.cutree))
+  # strain.col_annots<-data.frame(strain=as.factor(c(rep("WT",10),rep("spo13",10))))
+  # rownames(strain.col_annots)<-colnames(df[,meancols])
+  rownames(hclustdf.row_annots)<-df$Gene.name
+ rownames(df)<-df$Gene.name
+ colnames(df[,cols])<-gsub("nona_norm_","",colnames(df[,cols]))
+ 
+  clust.heatmap<-pheatmap(df[,cols], main=paste0(title," n=",nrow(df)),scale = 'row', clustering_method = "ward.D2",annotation_row=hclustdf.row_annots,cutree_rows = clusternum, show_rownames = T, show_colnames = T, cluster_cols = T,border_color = "NA",labels_col=gsub("nona_norm_","",colnames(df[,cols]))
+                          )
+  return(clust.heatmap)
+}
+
+
+# clustering heatmaps
+
+protg_WT_cols<-grep("WT",nona_norm.tmt.cols,value=T)
+protg_spo13_cols<-grep("spo13_",nona_norm.tmt.cols,value=T)
+protg_spo13m2_cols<-grep("spo13m2",nona_norm.tmt.cols,value=T)
+
+# spo13 v WT proteins
+#hclust
+protg_3reps_spo13_WT_sig.hclust<-hclust(dist(t(apply(as.matrix(protg_3reps_spo13_WT_sig[,c(protg_WT_cols,protg_spo13_cols)]),1,scale))),method="ward.D2")
+
+# how many clusters are appropriate
+wssplot(as.matrix(protg_3reps_spo13_WT_sig[,c(protg_WT_cols,protg_spo13_cols)]),nc=20,iter.max=50) #6?
+
+spo13_WT_protein_clust_heatmap<-get_clust_heatmap(protg_3reps_spo13_WT_sig,protg_3reps_spo13_WT_sig.hclust,c(protg_WT_cols,protg_spo13_cols),6,"WT","spo13","spo13 v WT sigdiff proteins")
+# 6 x 8 portrait
+
+# spo13m2 v WT protein clustering
+#hclust
+protg_3reps_spo13m2_WT_sig.hclust<-hclust(dist(t(apply(as.matrix(protg_3reps_spo13m2_WT_sig[,c(protg_WT_cols,protg_spo13m2_cols)]),1,scale))),method="ward.D2")
+
+# how many clusters are appropriate
+wssplot(as.matrix(protg_3reps_spo13m2_WT_sig[,c(protg_WT_cols,protg_spo13m2_cols)]),nc=20,iter.max=50) #5?
+
+spo13m2_WT_protein_clust_heatmap<-get_clust_heatmap(protg_3reps_spo13m2_WT_sig,protg_3reps_spo13m2_WT_sig.hclust,c(protg_WT_cols,protg_spo13m2_cols),6,"WT","spo13m2","spo13m2 v WT sigdiff proteins")
+
+# spo13 v spo13m2 protein clustering
+#hclust
+protg_3reps_spo13_spo13m2_sig.hclust<-hclust(dist(t(apply(as.matrix(protg_3reps_spo13_spo13m2_sig[,c(protg_spo13_cols,protg_spo13m2_cols)]),1,scale))),method="ward.D2")
+
+# how many clusters are appropriate
+wssplot(as.matrix(protg_3reps_spo13_spo13m2_sig[,c(protg_spo13_cols,protg_spo13m2_cols)]),nc=20,iter.max=50) #4?
+
+spo13_spo13m2_protein_clust_heatmap<-get_clust_heatmap(protg_3reps_spo13_spo13m2_sig,protg_3reps_spo13_spo13m2_sig.hclust,c(protg_spo13_cols,protg_spo13m2_cols),4,"spo13","spo13m2","spo13 v spo13m2 sigdiff proteins")
+
+
+# add cluster col
+
+protg_3reps_spo13_WT_sig<-protg_3reps_spo13_WT_sig %>%
+    mutate(ward.cluster=cutree(spo13_WT_protein_clust_heatmap$tree_row,k=6))
+
+protg_3reps_spo13m2_WT_sig<-protg_3reps_spo13m2_WT_sig %>%
+    mutate(ward.cluster=cutree(spo13m2_WT_protein_clust_heatmap$tree_row,k=6))
+
+# export protg clust ids
+protg_3reps_spo13_WT_sig %>%
+    select(Gene.name,ward.cluster) %>%
+    group_by(ward.cluster) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=ward.cluster,values_from=Gene.name,id_cols=id) %>%
+    select(-id) %>%
+    rename_with(~paste0("cluster_",.x,recycle0=T)) %>%
+    write.xlsx(.,"Metaphase_protg_spo13_WT_clust_ids.xlsx")
+
+protg_3reps_spo13m2_WT_sig %>%
+    select(Gene.name,ward.cluster) %>%
+    group_by(ward.cluster) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=ward.cluster,values_from=Gene.name,id_cols=id) %>%
+    select(-id) %>%
+    rename_with(~paste0("cluster_",.x,recycle0=T)) %>%
+    write.xlsx(.,"Metaphase_protg_spo13m2_WT_clust_ids.xlsx")
+
+```
+
+# Clustering of phospho-sites most different
+```{r,echo=F,message=F,warning=F}
+# there are far too many sites to label on the heatmap
+# phosphos_3reps_WT_spo13_sig %>% nrow() #893
+
+get_clust_heatmap_sites<-function(df,hclustdf,cols,clusternum,strain1,strain2,title){
+    #cols<-gsub("nona_norm_","",cols)
+    hclustdf.cutree<-cutree(hclustdf,k=clusternum)
+  hclustdf.row_annots<-data.frame(cluster = as.factor(hclustdf.cutree))
+
+  rownames(hclustdf.row_annots)<-df$gene.name_site
+ rownames(df)<-df$gene.name_site
+ colnames(df[,cols])<-gsub("nona_stoic_","",colnames(df[,cols]))
+ 
+  clust.heatmap<-pheatmap(df[,cols], main=paste0(title," n=",nrow(df)),scale = 'row', clustering_method = "ward.D2",annotation_row=hclustdf.row_annots,cutree_rows = clusternum, show_rownames = F, show_colnames = T, cluster_cols = T,border_color = "NA",labels_col=gsub("nona_stoic_","",colnames(df[,cols]))
+                          )
+  return(clust.heatmap)
+}
+
+# clustering heatmaps
+
+phos_WT_cols<-grep("WT",nona_phos.stoic.cols,value=T)
+phos_spo13_cols<-grep("spo13_",nona_phos.stoic.cols,value=T)
+phos_spo13m2_cols<-grep("spo13m2",nona_phos.stoic.cols,value=T)
+
+
+# spo13 v WT sites
+#hclust
+phosphos_3reps_spo13_WT_sig.hclust<-hclust(dist(t(apply(as.matrix(phosphos_3reps_spo13_WT_sig[,c(phos_WT_cols,phos_spo13_cols)]),1,scale))),method="ward.D2")
+
+# how many clusters are appropriate
+wssplot(as.matrix(phosphos_3reps_spo13_WT_sig[,c(phos_WT_cols,phos_spo13_cols)]),nc=20,iter.max=50) #10
+
+spo13_WT_phos_clust_heatmap<-get_clust_heatmap_sites(phosphos_3reps_spo13_WT_sig,phosphos_3reps_spo13_WT_sig.hclust,c(phos_WT_cols,phos_spo13_cols),10,"WT","spo13","spo13 v WT sigdiff sites")
+
+# spo13m2 v WT sites
+#hclust
+phosphos_3reps_spo13m2_WT_sig.hclust<-hclust(dist(t(apply(as.matrix(phosphos_3reps_spo13m2_WT_sig[,c(phos_WT_cols,phos_spo13m2_cols)]),1,scale))),method="ward.D2")
+
+# how many clusters are appropriate
+wssplot(as.matrix(phosphos_3reps_spo13m2_WT_sig[,c(phos_WT_cols,phos_spo13m2_cols)]),nc=20,iter.max=50) #5
+
+spo13m2_WT_phos_clust_heatmap<-get_clust_heatmap_sites(phosphos_3reps_spo13m2_WT_sig,phosphos_3reps_spo13m2_WT_sig.hclust,c(phos_WT_cols,phos_spo13m2_cols),5,"WT","spo13m2","spo13m2 v WT sigdiff sites")
+
+# spo13 v spo13m2 sites
+#hclust
+phosphos_3reps_spo13_spo13m2_sig.hclust<-hclust(dist(t(apply(as.matrix(phosphos_3reps_spo13_spo13m2_sig[,c(phos_spo13_cols,phos_spo13m2_cols)]),1,scale))),method="ward.D2")
+
+# how many clusters are appropriate
+wssplot(as.matrix(phosphos_3reps_spo13_spo13m2_sig[,c(phos_spo13_cols,phos_spo13m2_cols)]),nc=20,iter.max=50) #3
+
+spo13_spo13m2_phos_clust_heatmap<-get_clust_heatmap_sites(phosphos_3reps_spo13_spo13m2_sig,phosphos_3reps_spo13_spo13m2_sig.hclust,c(phos_spo13_cols,phos_spo13m2_cols),4,"spo13","spo13m2","spo13 v spo13m2 sigdiff sites")
+
+# spo13_WT_phos_clust_heatmap
+# spo13m2_WT_phos_clust_heatmap
+# spo13_spo13m2_phos_clust_heatmap
+
+
+# add cluster cols
+phosphos_3reps_spo13_WT_sig<-phosphos_3reps_spo13_WT_sig %>%
+    mutate(ward.cluster=cutree(spo13_WT_phos_clust_heatmap$tree_row,k=10))
+
+phosphos_3reps_spo13m2_WT_sig<-phosphos_3reps_spo13m2_WT_sig %>%
+    mutate(ward.cluster=cutree(spo13m2_WT_phos_clust_heatmap$tree_row,k=5))
+
+phosphos_3reps_spo13_spo13m2_sig<-phosphos_3reps_spo13_spo13m2_sig %>%
+    mutate(ward.cluster=cutree(spo13_spo13m2_phos_clust_heatmap$tree_row,k=4))
+
+# export cluster lists to excel
+
+phosphos_3reps_spo13_WT_sig %>%
+    arrange(ward.cluster) %>%
+    group_by(ward.cluster) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=ward.cluster,values_from=gene.name_site,id_cols=id) %>%
+    select(-id) %>%
+    rename_with(~paste0("cluster_",.x,recycle0=T)) %>%
+    write.xlsx(.,file="MetaphaseI_spo13_WT_sig_phos_clust_ids.xlsx")
+
+phosphos_3reps_spo13m2_WT_sig %>%
+    arrange(ward.cluster) %>%
+    group_by(ward.cluster) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=ward.cluster,values_from=gene.name_site,id_cols=id) %>%
+    select(-id) %>%
+    rename_with(~paste0("cluster_",.x,recycle0=T)) %>%
+    write.xlsx(.,file="MetaphaseI_spo13m2_WT_sig_phos_clust_ids.xlsx")
+
+phosphos_3reps_spo13_spo13m2_sig %>%
+    arrange(ward.cluster) %>%
+    group_by(ward.cluster) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=ward.cluster,values_from=gene.name_site,id_cols=id) %>%
+    select(-id) %>%
+    rename_with(~paste0("cluster_",.x,recycle0=T)) %>%
+    write.xlsx(.,file="MetaphaseI_spo13_spo13m2_sig_phos_clust_ids.xlsx")
+```
+
+# Print pdfs of clustering
+```{r,echo=F,message=F,warning=F}
+
+# print to R clusterings
+# WT_spo13_protein_clust_heatmap
+# WT_spo13m2_protein_clust_heatmap
+# spo13_spo13m2_protein_clust_heatmap
+# 
+# WT_spo13_phos_clust_heatmap
+# WT_spo13m2_phos_clust_heatmap
+# spo13_spo13m2_phos_clust_heatmap
+
+# print to pdf clusterings
+# protein 3 comparisons
+print_plot(spo13_WT_protein_clust_heatmap,
+           "spo13_WT_protein_clust_heatmap.pdf",6,18)
+
+
+print_plot(spo13m2_WT_protein_clust_heatmap,
+           "spo13m2_WT_protein_clust_heatmap.pdf",6,8)
+
+
+print_plot(spo13_spo13m2_protein_clust_heatmap,
+           "spo13_spo13m2_protein_clust_heatmap.pdf",6,8)
+
+# phos 3 comparisons
+print_plot(spo13_WT_phos_clust_heatmap,
+           "spo13_WT_phos_clust_heatmap.pdf",5,6) 
+print_plot(spo13m2_WT_phos_clust_heatmap,
+           "spo13m2_WT_phos_clust_heatmap.pdf",5,6)
+print_plot(spo13_spo13m2_phos_clust_heatmap,
+           "spo13_spo13m2_phos_clust_heatmap.pdf",5,6)
+
+```
+
+
+
+# DEN.STF sites clustering
+
+```{r,echo=F,message=F,warning=F}
+
+ 
+# DEN.STF sites clustering among all 3 comparisons
+# sub DEN.STF site df
+
+DEN.STF_phos_df<-phosphos_3reps_loc %>% filter(grepl(".............[DEN].[ST]F..............",Sequence.window))
+
+#hclust
+phos_DEN.STF.hclust<-hclust(dist(t(apply(as.matrix(DEN.STF_phos_df[,c(phos_WT_cols,phos_spo13_cols,phos_spo13m2_cols)]),1,scale))),method="ward.D2")
+
+# how many clusters are appropriate
+wssplot(as.matrix(DEN.STF_phos_df[,c(phos_WT_cols,phos_spo13_cols,phos_spo13m2_cols)]),nc=20,iter.max=50) #4
+
+## modified to show WT_spo13 sig catgories #####
+get_clust_heatmap_sites_3<-function(df,hclustdf,cols,clusternum,strain1,strain2,title){
+    #cols<-gsub("nona_norm_","",cols)
+    hclustdf.cutree<-cutree(hclustdf,k=clusternum)
+  hclustdf.row_annots<-data.frame(WT_spo13_sig=as.factor(df$spo13_WT_sig),
+                                  WT_spo13m2_sig=as.factor(df$spo13m2_WT_sig),
+                                  spo13_spo13m2_sig=as.factor(df$spo13_spo13m2_sig),
+                                  cluster = as.factor(hclustdf.cutree))
+
+  rownames(hclustdf.row_annots)<-df$gene.name_site
+ rownames(df)<-df$gene.name_site
+ colnames(df[,cols])<-gsub("nona_stoic_","",colnames(df[,cols]))
+ 
+  clust.heatmap<-pheatmap(df[,cols], main=paste0(title," n=",nrow(df)),scale = 'row', clustering_method = "ward.D2",annotation_row=hclustdf.row_annots,cutree_rows = clusternum, show_rownames = T, show_colnames = T, cluster_cols = F,border_color = "NA",labels_col=gsub("nona_stoic_","",colnames(df[,cols]))
+                          )
+  return(clust.heatmap)
+}
+
+# re plot with sig levels labeled
+DEN.STF_sites_clust_3<-get_clust_heatmap_sites_3(DEN.STF_phos_df,phos_DEN.STF.hclust,c(phos_WT_cols,phos_spo13_cols,phos_spo13m2_cols),4,"WT","spo13m2","All Exp40E DEN.STF sites")
+
+print_plot(DEN.STF_sites_clust_3,
+           "Exp40E_DEN.STF_phos_clust_heatmap_siglabel.pdf",9,14)
+
+# add cluster col to df
+DEN.STF_phos_df <- DEN.STF_phos_df %>%
+  mutate(ward.cluster=cutree(DEN.STF_sites_clust_3$tree_row, k= 4))
+
+
+# # SIG SSITES
+# 
+# DEN.STF_sig_phos_df<-phosphos_3reps_loc %>% filter(grepl(".............[DEN].[ST]F..............",Sequence.window)) %>%
+#     filter(spo13_WT_sig!="NC"|spo13m2_WT_sig!="NC")
+# 
+# #nrow(DEN.STF_sig_phos_df) #22
+# 
+# #hclust
+# phos_DEN.STF.sig.hclust<-hclust(dist(t(apply(as.matrix(DEN.STF_sig_phos_df[,c(phos_WT_cols,phos_spo13_cols,phos_spo13m2_cols)]),1,scale))),method="ward.D2")
+# 
+# # how many clusters are appropriate
+# wssplot(as.matrix(DEN.STF_sig_phos_df[,c(phos_WT_cols,phos_spo13_cols,phos_spo13m2_cols)]),nc=19,iter.max=50) #2
+# 
+# DEN.STF_sig_sites_clust<-get_clust_heatmap_sites_2(DEN.STF_sig_phos_df,phos_DEN.STF.sig.hclust,c(phos_WT_cols,phos_spo13_cols,phos_spo13m2_cols),2,"WT","spo13","WT_spo13 or WT_spo13m2 DECR Exp40E DEN.STF sites")
+# 
+# print_plot(DEN.STF_sig_sites_clust,
+#            "Exp40E_DEN.STF_sig_phos_clust_heatmap.pdf",8,6)
+
+# # addcluster col
+# DEN.STF_sig_phos_df <- DEN.STF_sig_phos_df %>%
+#   mutate(ward.cluster=cutree(DEN.STF_sig_sites_clust$tree_row, k= 2))
+# 
+# # export
+# DEN.STF_sig_clust_list<-list()
+# 
+# DEN.STF_sig_clust_list[[1]]<-DEN.STF_sig_phos_df %>%
+#     select(Gene.name,gene.name_site,ward.cluster,spo13_WT_sig,spo13m2_WT_sig)
+# 
+# # GO TERMS
+# DEN.STF_sig_clust_list[[2]]<-gost(DEN.STF_sig_phos_df %>%
+#          select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+#     select(term_name,term_id,source,p_value,intersection)
+# 
+# names(DEN.STF_sig_clust_list)<-c("all_sites","all_GO_terms")
+# 
+# write.xlsx(DEN.STF_sig_clust_list,"DEN.STF_sig_cluster_GO.xlsx")
+# 
+# # any ssites sig DECR in spo13 mut v WT
+# # gost(DEN.STF_sig_phos_df %>%
+# #          select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+# #     select(term_name,term_id,source,p_value,intersection) %>%
+# #     write_clip()
+# 
+# # ssites in cluter 3 or 3+2 in DEN.STF cluteirng
+# 
+# DEN.STF_clust_list<-list()
+# 
+# DEN.STF_clust_list[[1]]<-DEN.STF_phos_df %>%
+#     select(Gene.name,gene.name_site,ward.cluster,spo13_WT_sig,spo13m2_WT_sig)
+# 
+# DEN.STF_clust_list[[2]]<-gost(DEN.STF_phos_df %>%
+#          select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+#     select(term_name,term_id,source,p_value,intersection) 
+# 
+# DEN.STF_clust_list[[3]]<-DEN.STF_phos_df %>%
+#     filter(ward.cluster==3) %>%
+#     select(Gene.name,gene.name_site,ward.cluster,spo13_WT_sig,spo13m2_WT_sig)
+# 
+# DEN.STF_clust_list[[4]]<-DEN.STF_phos_df %>%
+#     filter(ward.cluster==3|ward.cluster==2) %>%
+#     select(Gene.name,gene.name_site,ward.cluster,spo13_WT_sig,spo13m2_WT_sig)
+# 
+# DEN.STF_clust_list[[5]]<-gost(DEN.STF_phos_df %>%
+#     filter(ward.cluster==3) %>%
+#          select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+#     select(term_name,term_id,source,p_value,intersection) 
+# 
+# DEN.STF_clust_list[[6]]<-gost(DEN.STF_phos_df %>%
+#     filter(ward.cluster==3|ward.cluster==2) %>%
+#          select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+#     select(term_name,term_id,source,p_value,intersection) 
+# 
+# names(DEN.STF_clust_list)<-c("all_sites","all_sites_GO_terms","cluster_3","cluster_2_or_3","cluster_3_GO_terms","cluster_2_or_3_GO_terms")
+# 
+# write.xlsx(DEN.STF_clust_list,"DEN.STF_cluster_GO.xlsx")
+
+
+
+```
+
+
+# phos sig cat GO terms
+```{r}
+
+library(gprofiler2)
+
+    
+# GO terms enriched among spo13 v WT sigdiff sites
+
+spo13_WT_sig_cat_GO_dfs<-list()
+spo13_WT_sig_cat_GO_dfs[[1]]<-gost(phosphos_3reps_spo13_WT_sig %>%
+    filter(spo13_WT_sig!="NC") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    select(term_name,term_id,source,p_value,intersection)
+spo13_WT_sig_cat_GO_dfs[[2]]<-gost(phosphos_3reps_spo13_WT_sig %>%
+    filter(spo13_WT_sig=="DECR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    select(term_name,term_id,source,p_value,intersection)
+spo13_WT_sig_cat_GO_dfs[[3]]<-gost(phosphos_3reps_spo13_WT_sig %>%
+    filter(spo13_WT_sig=="INCR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    select(term_name,term_id,source,p_value,intersection)
+
+names(spo13_WT_sig_cat_GO_dfs)<-c("spo13_WT_allsig","spo13_WT_DECR","spo13_WT_INCR")
+
+write.xlsx(spo13_WT_sig_cat_GO_dfs,"spo13_WT_sig_cat_GO_terms.xlsx")
+
+# GO terms enriched among spo13m2 v WT sigdiff sites
+
+spo13m2_WT_sig_cat_GO_dfs<-list()
+spo13m2_WT_sig_cat_GO_dfs[[1]]<-gost(phosphos_3reps_spo13m2_WT_sig %>%
+    filter(spo13m2_WT_sig!="NC") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    select(term_name,term_id,source,p_value,intersection)
+spo13m2_WT_sig_cat_GO_dfs[[2]]<-gost(phosphos_3reps_spo13m2_WT_sig %>%
+    filter(spo13m2_WT_sig=="DECR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    select(term_name,term_id,source,p_value,intersection)
+spo13m2_WT_sig_cat_GO_dfs[[3]]<-gost(phosphos_3reps_spo13m2_WT_sig %>%
+    filter(spo13m2_WT_sig=="INCR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    select(term_name,term_id,source,p_value,intersection)
+
+names(spo13m2_WT_sig_cat_GO_dfs)<-c("spo13m2_WT_allsig","spo13m2_WT_DECR","spo13m2_WT_INCR")
+
+write.xlsx(spo13m2_WT_sig_cat_GO_dfs,"spo13m2_WT_sig_cat_GO_terms.xlsx")
+
+
+# GO terms enriched among spo13 v spo13m2 sigdiff sites
+
+spo13_spo13m2_sig_cat_GO_dfs<-list()
+spo13_spo13m2_sig_cat_GO_dfs[[1]]<-gost(phosphos_3reps_spo13_spo13m2_sig %>%
+    filter(spo13_spo13m2_sig!="NC") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    select(term_name,term_id,source,p_value,intersection)
+spo13_spo13m2_sig_cat_GO_dfs[[2]]<-gost(phosphos_3reps_spo13_spo13m2_sig %>%
+    filter(spo13_spo13m2_sig=="DECR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    select(term_name,term_id,source,p_value,intersection)
+spo13_spo13m2_sig_cat_GO_dfs[[3]]<-gost(phosphos_3reps_spo13_spo13m2_sig %>%
+    filter(spo13_spo13m2_sig=="INCR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    select(term_name,term_id,source,p_value,intersection)
+
+names(spo13_spo13m2_sig_cat_GO_dfs)<-c("spo13_spo13m2_allsig","spo13_spo13m2_DECR","spo13_spo13m2_INCR")
+
+write.xlsx(spo13_spo13m2_sig_cat_GO_dfs,"spo13_spo13m2_sig_cat_GO_terms.xlsx")
+
+
+# which GO terms are shared v unique in DECR spo13 v WT and sspo13m2 v WT
+
+# intersect(spo13_WT_sig_cat_GO_dfs[[2]]$term_name ,spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name) #137 overlap
+# 
+# spo13_WT_sig_cat_GO_dfs[[2]]$term_name[!spo13_WT_sig_cat_GO_dfs[[2]]$term_name %in% intersect(spo13_WT_sig_cat_GO_dfs[[2]]$term_name ,spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name)] #206 unique to spo13_WT
+# 
+# length(spo13_WT_sig_cat_GO_dfs[[2]]$term_name) #343 terms enriched spo13_WT
+# 
+# #206+137 = 343
+# 
+# spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name[!spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name %in% intersect(spo13_WT_sig_cat_GO_dfs[[2]]$term_name ,spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name)] #16 unique to spo13m2_WT
+# 
+# length(spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name) #153 terms enriched spo13m2_WT
+# 
+# #153-137 = 16 
+
+# export df that includes unique and intersecting GO terms from DECR spo13 v WT and spo13m2 v WT
+
+overlap_DECR_spo13_spo13m2_phos_GO_dfs<-list()
+
+overlap_DECR_spo13_spo13m2_phos_GO_dfs[[1]]<-spo13_WT_sig_cat_GO_dfs[[2]] %>%
+    filter(term_name %in% intersect(spo13_WT_sig_cat_GO_dfs[[2]]$term_name ,spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name)) # 137 GO terms overlap
+
+overlap_DECR_spo13_spo13m2_phos_GO_dfs[[2]]<-spo13_WT_sig_cat_GO_dfs[[2]] %>%
+    filter(term_name %in% spo13_WT_sig_cat_GO_dfs[[2]]$term_name[!spo13_WT_sig_cat_GO_dfs[[2]]$term_name %in% intersect(spo13_WT_sig_cat_GO_dfs[[2]]$term_name ,spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name)]) # 206 GO terms unique to spo13 v WT
+
+overlap_DECR_spo13_spo13m2_phos_GO_dfs[[3]]<-spo13m2_WT_sig_cat_GO_dfs[[2]] %>%
+    filter(term_name %in% spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name[!spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name %in% intersect(spo13_WT_sig_cat_GO_dfs[[2]]$term_name ,spo13m2_WT_sig_cat_GO_dfs[[2]]$term_name)]) # 16 GO terms unique to spo13m2 v WT
+
+names(overlap_DECR_spo13_spo13m2_phos_GO_dfs)<-c("spo13_spo13m2_DECR_both","spo13_DECR_unique","spo13m2_DECR_unique")
+
+write.xlsx(overlap_DECR_spo13_spo13m2_phos_GO_dfs,"overlap_spo13_spo13m2_DECR_v_WT_phos_GO_terms.xlsx")
+
+# export df that includes unique and intersecting GO terms from INCR spo13 v WT and spo13m2 v WT
+
+overlap_INCR_spo13_spo13m2_phos_GO_dfs<-list()
+
+overlap_INCR_spo13_spo13m2_phos_GO_dfs[[1]]<-spo13_WT_sig_cat_GO_dfs[[3]] %>%
+    filter(term_name %in% intersect(spo13_WT_sig_cat_GO_dfs[[3]]$term_name ,spo13m2_WT_sig_cat_GO_dfs[[3]]$term_name)) # 137 GO terms overlap
+
+overlap_INCR_spo13_spo13m2_phos_GO_dfs[[2]]<-spo13_WT_sig_cat_GO_dfs[[3]] %>%
+    filter(term_name %in% spo13_WT_sig_cat_GO_dfs[[3]]$term_name[!spo13_WT_sig_cat_GO_dfs[[3]]$term_name %in% intersect(spo13_WT_sig_cat_GO_dfs[[3]]$term_name ,spo13m2_WT_sig_cat_GO_dfs[[3]]$term_name)]) # 206 GO terms unique to spo13 v WT
+
+overlap_INCR_spo13_spo13m2_phos_GO_dfs[[3]]<-spo13m2_WT_sig_cat_GO_dfs[[3]] %>%
+    filter(term_name %in% spo13m2_WT_sig_cat_GO_dfs[[3]]$term_name[!spo13m2_WT_sig_cat_GO_dfs[[3]]$term_name %in% intersect(spo13_WT_sig_cat_GO_dfs[[3]]$term_name ,spo13m2_WT_sig_cat_GO_dfs[[3]]$term_name)]) # 16 GO terms unique to spo13m2 v WT
+
+names(overlap_INCR_spo13_spo13m2_phos_GO_dfs)<-c("spo13_spo13m2_INCR_both","spo13_INCR_unique","spo13m2_INCR_unique")
+
+write.xlsx(overlap_INCR_spo13_spo13m2_phos_GO_dfs,"overlap_spo13_spo13m2_INCR_v_WT_phos_GO_terms.xlsx")
+
+# select GO terms from each group and barplot:
+# spo13_WT DECR 
+# regulation of meiotic cell cycle GO:0051445
+# histone acetylation GO:0016573
+# autophagy GO:0006914
+# regulation of cytoskeleton organization GO:0051493
+# cortical actin cytoskeleton organization GO:0030866
+# spo13_WT INCR 
+# "cytoskeleton organization" GO:0007010 
+# "chromatin remodeling" GO:0006338 
+# cortical actin cytoskeleton organization GO:0030866
+# "RNA biosynthetic process" GO:0032774 
+# "prospore membrane" GO:0005628
+# spo13m2_WT DECR
+#  structural constituent of nuclear pore GO:0017056
+#  telomere tethering at nuclear periphery GO:0034398
+# spo13m2_WT INCR 
+# "regulation of cell wall organization or biogenesis" GO:1903338
+
+#meiotic cell cycle GO:0051321
+
+# double sided barplots
+# 4 colors
+# spo13 INCR
+# spo13 DECR
+# spo13m2 INCR
+# spo13m2 DECR
+
+
+all_terms<-c("GO:0007010","GO:0006338", "GO:0030866","GO:0032774","GO:0005628","GO:0051321","GO:0016573","GO:0006914","GO:0051493","GO:0030866","GO:1903338","GO:0017056","GO:0034398","GO:0098813","GO:0007051")
+
+# spo13 and spo13m2 DECR phospho-proteins enriched terms
+phos_prot_GO_bar<-rbind(spo13_INCR=gost(phosphos_3reps_spo13_WT_sig %>%
+    filter(spo13_WT_sig=="INCR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    filter(term_id %in% all_terms) %>%
+    select(term_name,term_id,p_value),
+spo13_DECR=gost(phosphos_3reps_spo13_WT_sig %>%
+    filter(spo13_WT_sig=="DECR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    filter(term_id %in% all_terms) %>%
+    select(term_name,term_id,p_value),
+spo13m2_INCR=gost(phosphos_3reps_spo13m2_WT_sig %>%
+    filter(spo13m2_WT_sig=="INCR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    filter(term_id %in% all_terms) %>%
+    select(term_name,term_id,p_value),
+spo13m2_DECR=gost(phosphos_3reps_spo13m2_WT_sig %>%
+    filter(spo13m2_WT_sig=="DECR") %>% select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+    filter(term_id %in% all_terms) %>%
+    select(term_name,term_id,p_value)) %>%
+    mutate(direction=ifelse(grepl("INCR",rownames(.)),"INCR","DECR")) %>%
+    mutate(p_value=ifelse(grepl("DECR",direction),log10(p_value),-log10(p_value))) %>%
+    mutate(sample=gsub("(.+)_(.+)","\\1",rownames(.))) %>%
+    ggplot(aes(x=term_name,y=p_value,fill=interaction(direction,sample)))+
+    geom_bar(stat="identity",position="identity")+
+    theme_classic()+
+    theme(axis.text.x=element_text(angle=90),axis.text=element_text(size=rel(1)))+
+    labs(x="",y="log10(p-value)",title="metaphase I sig changed phospho-proteins")+
+    coord_flip()+
+    scale_y_continuous(labels=label_number(accuracy=1))
+
+print_plot(phos_prot_GO_bar,"spo13_spo13m2_phos_prot_GO_bar.pdf",13,4)
+
+
+```
+
+# DEN.STF GO bar
+```{r}
+
+# how many unique phospho-proteins have the motif
+# phosphos_3reps_loc %>%
+#     filter(grepl(".............[DEN].[ST]F..............",Sequence.window)) %>%
+#     distinct(Gene.name) %>% nrow() #74
+
+# chromosome organization GO:0051276
+# meiotic chromosome separation GO:0051307
+# chromatin binding GO:0003682
+# nuclear division GO:0000280
+# sexual reproduction GO:0019953
+
+DEN.STF_terms<-c("GO:0051276","GO:0051307","GO:0003682","GO:0000280","GO:0019953")
+
+
+DEN.STF_meta_GO_bar<-gost(phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]F..............",Sequence.window)) %>%
+        select(Gene.name) %>% unlist(),organism='scerevisiae',evcodes=T, significant=T)$result %>%
+   filter(term_id %in% DEN.STF_terms) %>%
+    select(term_name,term_id,p_value) %>%
+    # mutate(direction=ifelse(grepl("INCR",rownames(.)),"INCR","DECR")) %>%
+    # mutate(p_value=ifelse(grepl("DECR",direction),log10(p_value),-log10(p_value))) %>%
+    #mutate(sample=gsub("(.+)_(.+)","\\1",rownames(.))) %>%
+    ggplot(aes(x=term_name,y=-log10(p_value),fill=term_name))+
+    geom_bar(stat="identity",position="identity")+
+    theme_classic()+
+    theme(axis.text.x=element_text(angle=90),axis.text=element_text(size=rel(1)),legend.position="none")+
+    labs(x="",y="-log10(p-value)",title="metaphase I [DEN].[ST]*F phospho-proteins")+
+    coord_flip()+
+    scale_y_continuous(labels=label_number(accuracy=1),expand=expansion(mult=c(0,0.1)))
+
+
+print_plot(DEN.STF_meta_GO_bar,
+           "DEN.STF_meta_GO_bar.pdf",10,3)
+
+```
+
+
+# Percent Polo sites sigdiff METAPHASE pie
+```{r}
+
+perc_polo_sigdiff_metaI_pie<-phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    group_by(spo13_WT_sig) %>% summarize(n=n()) %>%
+ggplot(aes(x="",y=n,fill=spo13_WT_sig,label=n))+
+    geom_bar(stat="identity")+
+    geom_label_repel()+
+    coord_polar("y", start=0)+
+    theme_void()+
+    scale_fill_manual(values=c("#7CAE00", "#00BFC4", "#C77CFF","blue"))+
+    ggtitle("Meta I sigdiff Polo sites")+
+    theme(legend.title=element_blank())
+
+print_plot(perc_polo_sigdiff_metaI_pie,
+           "perc_polo_sigdiff_metaI_pie.pdf",5,5)
+
+
+```
+
+
+# Number of sigdiff Polo sites barplot
+```{r,echo=F,message=F,warning=F}
+
+
+motif_sigcat_numbers_barplot<-function(df,motif,comp,title){
+    df %>%
+    filter(grepl(motif,Sequence.window)) %>% 
+    group_by(.data[[comp]]) %>%
+    summarize(n=n()) %>%
+    ggplot(aes(x=.data[[comp]],y=n,fill=.data[[comp]]))+
+    geom_bar(aes(fill=.data[[comp]]),stat="identity")+
+    geom_text(aes(label=n),vjust=-1)+
+        scale_y_continuous(expand=expansion(mult=c(0,0.2)))+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle=90,vjust=0.6),legend.position="none",axis.line=element_line(linewidth=0.25))+
+    labs(y="number of of sites",x="",title=title)
+}
+
+WT_spo13_DEN_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,".............[DEN].[ST]...............","spo13_WT_sig","[DEN].[ST] phospho-sites WT v spo13")
+WT_spo13m2_DEN_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,".............[DEN].[ST]...............","spo13m2_WT_sig","[DEN].[ST] phospho-sites WT v spo13m2")
+spo13_spo13m2_DEN_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,".............[DEN].[ST]...............","spo13_spo13m2_sig","[DEN].[ST] phospho-sites spo13 v spo13m2")
+
+
+WT_spo13_DEN_sigcat_barplot+WT_spo13m2_DEN_sigcat_barplot+spo13_spo13m2_DEN_sigcat_barplot
+
+print_plot(WT_spo13_DEN_sigcat_barplot+WT_spo13m2_DEN_sigcat_barplot+spo13_spo13m2_DEN_sigcat_barplot,
+           "DEN_sigcat_barplot.pdf",13,4)
+
+```
+
+# Number of sigdiff CDK sites barplot
+```{r,echo=F,message=F,warning=F}
+# Minimal CDK STP
+# 
+# phosphos_3reps_loc %>% 
+#     filter(grepl("...............[ST]P..............",Sequence.window)) %>% nrow() #1444 min CDK sites in all 9/10 samples
+
+WT_spo13_SP_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"...............[ST]P..............","spo13_WT_sig","[ST]P phospho-sites WT v spo13")
+WT_spo13m2_SP_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"...............[ST]P..............","spo13m2_WT_sig","[ST]P phospho-sites WT v spo13m2")
+spo13_spo13m2_SP_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"...............[ST]P..............","spo13_spo13m2_sig","[ST]P phospho-sites spo13 v spo13m2")
+
+print_plot(WT_spo13_SP_sigcat_barplot+WT_spo13m2_SP_sigcat_barplot+spo13_spo13m2_SP_sigcat_barplot,
+           "SP_sigcat_barplot.pdf",13,4)
+
+# strict CDK sites
+# phosphos_3reps_loc %>% 
+#     filter(grepl("...............[ST]P.[KR]............",Sequence.window)) %>% nrow() #246 strict CDK sites in all 9/10 samples
+    
+WT_spo13_SPKR_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"...............[ST]P.[KR]............","spo13_WT_sig","[ST]P.[KR] phospho-sites WT v spo13")
+WT_spo13m2_SPKR_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"...............[ST]P.[KR]............","spo13m2_WT_sig","[ST]P.[KR] phospho-sites WT v spo13m2")
+
+# has to be manually made to add back missing INCR col
+spo13_spo13m2_SPKR_sigcat_barplot<-phosphos_3reps_loc %>%
+    filter(grepl("...............[ST]P.[KR]............",Sequence.window)) %>% 
+    group_by(spo13_spo13m2_sig) %>%
+    summarize(n=n()) %>%
+    rbind(c("INCR","0")) %>%
+    mutate(spo13_spo13m2_sig=factor(spo13_spo13m2_sig,levels=c("DECR","INCR","NC"))) %>%
+    mutate(n=as.numeric(n)) %>%
+    ggplot(aes(spo13_spo13m2_sig,y=n,fill=spo13_spo13m2_sig))+
+    geom_bar(aes(fill=spo13_spo13m2_sig),stat="identity")+
+    geom_text(aes(label=n),vjust=-1)+
+        scale_y_continuous(expand=expansion(mult=c(0,0.2)))+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle=90,vjust=0.6),legend.position="none",axis.line=element_line(linewidth=0.25))+
+    labs(y="number of of sites",x="",title="[ST]P.[KR] phospho-sites spo13 v spo13m2")
+    
+
+print_plot(WT_spo13_SPKR_sigcat_barplot+WT_spo13m2_SPKR_sigcat_barplot+spo13_spo13m2_SPKR_sigcat_barplot,
+           "SP.KR_sigcat_barplot.pdf",13,4)
+
+```
+
+# Number sigdiff RK.ST sites barplot
+```{r,echo=F,message=F,warning=F}
+
+#RK.ST sites
+#
+WT_spo13_KR.ST_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,".............[KR].[ST]P..............","spo13_WT_sig","[RK].[ST] phospho-sites WT v spo13")
+WT_spo13m2_KR.ST_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,".............[KR].[ST]P..............","spo13m2_WT_sig","[RK].[ST] phospho-sites WT v spo13m2")
+
+# spo13 v spo13_m2 has to be manually made since there are no INCR sites and the row has to be added back
+spo13_spo13m2_KR.ST_sigcat_barplot<-phosphos_3reps_loc %>%
+    filter(grepl(".............[KR].[ST]P..............",Sequence.window)) %>% 
+    group_by(spo13_spo13m2_sig) %>%
+    summarize(n=n()) %>%
+    rbind(c("INCR","0")) %>%
+    mutate(spo13_spo13m2_sig=factor(spo13_spo13m2_sig,levels=c("DECR","INCR","NC"))) %>%
+    mutate(n=as.numeric(n)) %>%
+    ggplot(aes(spo13_spo13m2_sig,y=n,fill=spo13_spo13m2_sig))+
+    geom_bar(aes(fill=spo13_spo13m2_sig),stat="identity")+
+    geom_text(aes(label=n),vjust=-1)+
+        scale_y_continuous(expand=expansion(mult=c(0,0.2)))+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle=90,vjust=0.6),legend.position="none",axis.line=element_line(linewidth=0.25))+
+    labs(y="number of of sites",x="",title="[RK].[ST] phospho-sites spo13 v spo13m2")
+
+
+print_plot(WT_spo13_KR.ST_sigcat_barplot+WT_spo13m2_KR.ST_sigcat_barplot+spo13_spo13m2_KR.ST_sigcat_barplot,
+           "KR.ST_sigcat_barplot.pdf",13,4)
+
+#RK..ST sites
+
+WT_spo13_KR..ST_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"............[KR]..[ST]...............","spo13_WT_sig","[RK]..[ST] phospho-sites WT v spo13")
+WT_spo13m2_KR..ST_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"............[KR]..[ST]...............","spo13m2_WT_sig","[RK]..[ST] phospho-sites WT v spo13m2")
+spo13_spo13m2_KR..ST_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"............[KR]..[ST]...............","spo13_spo13m2_sig","[RK]..[ST] phospho-sites WT v spo13m2")
+
+print_plot(WT_spo13_KR..ST_sigcat_barplot+WT_spo13m2_KR..ST_sigcat_barplot+spo13_spo13m2_KR..ST_sigcat_barplot,
+           "KR..ST_sigcat_barplot.pdf",13,4)
+
+# KRKR.ST sites
+WT_spo13_KRKR.ST_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"............[KR][KR].[ST]...............","spo13_WT_sig","[RK][RK].[ST] phospho-sites WT v spo13")
+WT_spo13m2_KRKR.ST_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"............[KR][KR].[ST]...............","spo13m2_WT_sig","[RK][RK].[ST] phospho-sites WT v spo13m2")
+spo13_spo13m2_KRKR.ST_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"............[KR][KR].[ST]...............","spo13_spo13m2_sig","[RK][RK].[ST] phospho-sites WT v spo13m2")
+
+print_plot(WT_spo13_KRKR.ST_sigcat_barplot+WT_spo13m2_KRKR.ST_sigcat_barplot+spo13_spo13m2_KRKR.ST_sigcat_barplot,
+           "KRKR.ST_sigcat_barplot.pdf",13,4)
+
+```
+
+# export sigcat ids
+
+```{r}
+
+
+# spo13 v WT protg sig cats
+protg_3reps %>%
+   #mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+    select(Gene.name,spo13_WT_sig) %>%
+    arrange(spo13_WT_sig) %>%
+    mutate(spo13_WT_sig=factor(spo13_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+    arrange(spo13_WT_sig) %>%
+    group_by(spo13_WT_sig) %>%
+    mutate(id=row_number()) %>% 
+    pivot_wider(names_from=spo13_WT_sig,values_from=Gene.name,id_cols=id) %>%
+    select(-id) %>%
+    write.xlsx(.,"Metaphase_protg_spo13_WT_sigcat_ids.xlsx")
+
+protg_3reps %>%
+   #mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+    select(Gene.name,spo13m2_WT_sig) %>%
+    arrange(spo13m2_WT_sig) %>%
+    mutate(spo13m2_WT_sig=factor(spo13m2_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+    arrange(spo13m2_WT_sig) %>%
+    group_by(spo13m2_WT_sig) %>%
+    mutate(id=row_number()) %>% 
+    pivot_wider(names_from=spo13m2_WT_sig,values_from=Gene.name,id_cols=id) %>%
+    select(-id) %>%
+    write.xlsx(.,"Metaphase_protg_spo13m2_WT_sigcat_ids.xlsx")
+
+
+# phos sigcat ids
+# single sheet with different columns for each sigdiff category
+
+# spo13 v WT phos sig cats
+phosphos_3reps_loc %>%
+   #mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+    select(gene.name_site,spo13_WT_sig) %>%
+    arrange(spo13_WT_sig) %>%
+    mutate(spo13_WT_sig=factor(spo13_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+    arrange(spo13_WT_sig) %>%
+    group_by(spo13_WT_sig) %>%
+    mutate(id=row_number()) %>% 
+    pivot_wider(names_from=spo13_WT_sig,values_from=gene.name_site,id_cols=id) %>%
+    select(-id) %>%
+    write.xlsx(.,"Metaphase_phos_spo13_WT_sigcat_ids.xlsx")
+
+# spo13m2 v WT phos sig cats
+phosphos_3reps_loc %>%
+   #mutate(Sequence.window_5=substr(Sequence.window,11,21)) %>%
+    select(gene.name_site,spo13m2_WT_sig) %>%
+    arrange(spo13m2_WT_sig) %>%
+    mutate(spo13m2_WT_sig=factor(spo13m2_WT_sig,levels=c("NC","INCR","DECR"))) %>%
+    arrange(spo13m2_WT_sig) %>%
+    group_by(spo13m2_WT_sig) %>%
+    mutate(id=row_number()) %>% 
+    pivot_wider(names_from=spo13m2_WT_sig,values_from=gene.name_site,id_cols=id) %>%
+    select(-id) %>%
+    write.xlsx(.,"Metaphase_phos_spo13m2_WT_sigcat_ids.xlsx")
+
+
+```
+
+
+# export results tables for cross-analysis with timecourse
+```{r,echo=F,message=F,warning=F}
+
+write.csv(protg_3reps,"Exp40E_protg.csv")
+write.csv(phosphos_3reps_loc,"Exp40E_phos.csv")
+
+```
