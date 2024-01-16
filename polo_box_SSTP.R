@@ -1,5 +1,16 @@
 # Analysis of number of polo boxes in proteins differentially phos in
 # WT vs spo13
+# 
+# This script takes lists of proteins that were differentially phos in 
+# WT vs spo13 
+# from the timecourse
+# and metaphase I experiments
+# and then I retrieved tables from YeastMine
+# of those gene lists that had the entire ORF protein sequence
+# of those genes/proteins.
+# Then I read those tables into R and used regex to find motif matches
+# create plots
+# and perform fisher tests.
 
 library(dplyr)
 library(clipr)
@@ -270,7 +281,7 @@ spo13_WT_box<-merge(spo13_NC_df %>%
       spo13_DECR_df %>%
           select(Proteins.Standard.Name,polo_motif_number), 
       by="Proteins.Standard.Name",all=T) %>%
-    replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
+    replace(.=="NULL", NA) %>%# replace NULL with NA 
     rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
     rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
     rename_with(~gsub("polo_motif_number_","",.x)) %>%
@@ -294,7 +305,7 @@ spo13_WT_polo_box<-merge(spo13_polo_NC_df %>%
       spo13_polo_DECR_df %>%
           select(Proteins.Standard.Name,polo_motif_number), 
       by="Proteins.Standard.Name",all=T) %>%
-    replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
+    replace(.=="NULL", NA) %>%# replace NULL with NA 
     rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
     rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
     rename_with(~gsub("polo_motif_number_","",.x)) %>%
@@ -318,7 +329,7 @@ spo13m2_WT_box<-merge(spo13m2_NC_df %>%
       spo13m2_DECR_df %>%
           select(Proteins.Standard.Name,polo_motif_number), 
       by="Proteins.Standard.Name",all=T) %>%
-    replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
+    replace(.=="NULL", NA) %>%# replace NULL with NA 
     rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
     rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
     rename_with(~gsub("polo_motif_number_","",.x)) %>%
@@ -342,7 +353,7 @@ spo13m2_WT_polo_box<-merge(spo13m2_polo_NC_df %>%
       spo13m2_polo_DECR_df %>%
           select(Proteins.Standard.Name,polo_motif_number), 
       by="Proteins.Standard.Name",all=T) %>%
-    replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
+    replace(.=="NULL", NA) %>%# replace NULL with NA 
     rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
     rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
     rename_with(~gsub("polo_motif_number_","",.x)) %>%
@@ -366,7 +377,7 @@ TC_spo13_WT_box<-merge(TC_spo13_NC_df %>%
       TC_spo13_DECR_df %>%
           select(Proteins.Standard.Name,polo_motif_number), 
       by="Proteins.Standard.Name",all=T) %>%
-    replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
+    replace(.=="NULL", NA) %>%# replace NULL with NA 
     rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
     rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
     rename_with(~gsub("polo_motif_number_","",.x)) %>%
@@ -390,7 +401,7 @@ TC_spo13_WT_polo_box<-merge(TC_spo13_polo_NC_df %>%
       TC_spo13_polo_DECR_df %>%
           select(Proteins.Standard.Name,polo_motif_number), 
       by="Proteins.Standard.Name",all=T) %>%
-    replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
+    replace(.=="NULL", NA) %>%# replace NULL with NA 
     rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
     rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
     rename_with(~gsub("polo_motif_number_","",.x)) %>%
@@ -422,19 +433,9 @@ print_plot(spo13m2_WT_polo_box,"spo13m2_WT_polo_box.pdf",6,4)
 print_plot(TC_spo13_WT_box,"TC_spo13_WT_box.pdf",6,4)
 print_plot(TC_spo13_WT_polo_box,"TC_spo13_WT_polo_box.pdf",6,4)
 
-# percent of proteins that have at least one motif
-# split into 3 groups:
-# detected as having phos in NC and DECR
-# detected as having phos only in NC
-# detected as having phos only in DECR
-# then in those 3 separate groups:
-# percent of proteins that have the polo motif
-# HOWEVER the proteins that are in both groups cancel each other out because they will have a motif in both groups...
 
 library(forcats)
 
-# spo13_NC_df %>%
-#     select(polo_box_motif) %>% head()
 
 # fisher tests
 two_fish<-function(df1,df2,set1,set2){
@@ -511,135 +512,3 @@ p6<-two_fish_bar(two_fish(TC_spo13_polo_NC_df,TC_spo13_polo_DECR_df),"NC","DECR"
 
 library(patchwork)
 print_plot((p1+p2+p3)/(p4+p5+p6),"motif_fish_bar.pdf",11,10)
-
-# # spo13 v WT metaphase I
-# rbind(merge(spo13_NC_df %>%
-#           select(Proteins.Standard.Name,polo_box_motif),
-#       spo13_DECR_df %>%
-#           select(Proteins.Standard.Name,polo_box_motif), 
-#       by="Proteins.Standard.Name",all=T) %>%
-#     replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
-#     rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
-#     rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
-#     rename_with(~gsub("polo_motif_number_","",.x)) %>%
-#     filter(!(is.finite(polo_box_motif_NC)&is.finite(polo_box_motif_DECR))) %>% # only phospho-prot that are UNIQUE in each group
-#     filter(is.finite(polo_box_motif_DECR)) %>%
-#     group_by(polo_box_motif_DECR) %>%
-#     summarize(n=n()) %>%
-#     mutate(perc=(n/sum(n))*100) %>%
-#     mutate(group="DECR") %>%
-#     rename(polo=polo_box_motif_DECR),
-#     merge(spo13_NC_df %>%
-#               select(Proteins.Standard.Name,polo_box_motif),
-#           spo13_DECR_df %>%
-#               select(Proteins.Standard.Name,polo_box_motif), 
-#           by="Proteins.Standard.Name",all=T) %>%
-#         replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
-#         rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
-#         rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
-#         rename_with(~gsub("polo_motif_number_","",.x)) %>%
-#         filter(!(is.finite(polo_box_motif_NC)&is.finite(polo_box_motif_DECR))) %>% # only phospho-prot that are UNIQUE in each group
-#         filter(is.finite(polo_box_motif_NC)) %>%
-#         group_by(polo_box_motif_NC) %>%
-#         summarize(n=n()) %>%
-#         mutate(perc=(n/sum(n))*100) %>%
-#         mutate(group="NC") %>%
-#         rename(polo=polo_box_motif_NC)) %>%
-#     mutate(sample_group=as.character(interaction(polo,group))) %>%
-#     filter(grepl("TRUE",sample_group)) %>%
-#     mutate(group=factor(group,levels=c("NC","DECR"))) %>%
-#     ggplot(aes(y=perc,x=group,fill=group))+
-#     geom_bar(stat="identity")+
-#     theme_classic()+
-#     theme(axis.text=element_text(angle=90),legend.position="none")+
-#     labs(x="",y="percent with S[ST]P motif",title="spo13 v WT metaphase I phospho-proteins")+
-#     scale_y_continuous(expand=expansion(mult=c(0,0.2))) # 20% more plot area after max value
-# 
-# 
-# # spo13m2 v WT metaphase I
-# rbind(merge(spo13m2_NC_df %>%
-#                 select(Proteins.Standard.Name,polo_box_motif),
-#             spo13m2_DECR_df %>%
-#                 select(Proteins.Standard.Name,polo_box_motif), 
-#             by="Proteins.Standard.Name",all=T) %>%
-#           replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
-#           rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
-#           rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
-#           rename_with(~gsub("polo_motif_number_","",.x)) %>%
-#           filter(!(is.finite(polo_box_motif_NC)&is.finite(polo_box_motif_DECR))) %>% # only phospho-prot that are UNIQUE in each group
-#           filter(is.finite(polo_box_motif_DECR)) %>%
-#           group_by(polo_box_motif_DECR) %>%
-#           summarize(n=n()) %>%
-#           mutate(perc=(n/sum(n))*100) %>%
-#           mutate(group="DECR") %>%
-#           rename(polo=polo_box_motif_DECR),
-#       merge(spo13m2_NC_df %>%
-#                 select(Proteins.Standard.Name,polo_box_motif),
-#             spo13m2_DECR_df %>%
-#                 select(Proteins.Standard.Name,polo_box_motif), 
-#             by="Proteins.Standard.Name",all=T) %>%
-#           replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
-#           rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
-#           rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
-#           rename_with(~gsub("polo_motif_number_","",.x)) %>%
-#           filter(!(is.finite(polo_box_motif_NC)&is.finite(polo_box_motif_DECR))) %>% # only phospho-prot that are UNIQUE in each group
-#           filter(is.finite(polo_box_motif_NC)) %>%
-#           group_by(polo_box_motif_NC) %>%
-#           summarize(n=n()) %>%
-#           mutate(perc=(n/sum(n))*100) %>%
-#           mutate(group="NC") %>%
-#           rename(polo=polo_box_motif_NC)) %>%
-#     mutate(sample_group=as.character(interaction(polo,group))) %>%
-#     filter(grepl("TRUE",sample_group)) %>%
-#     mutate(group=factor(group,levels=c("NC","DECR"))) %>%
-#     ggplot(aes(y=perc,x=group,fill=group))+
-#     geom_bar(stat="identity")+
-#     theme_classic()+
-#     theme(axis.text=element_text(angle=90),legend.position="none")+
-#     labs(x="",y="percent with S[ST]P motif",title="spo13m2 v WT metaphase I phospho-proteins")+
-#     scale_y_continuous(expand=expansion(mult=c(0,0.2))) # 20% more plot area after max value
-# 
-# # spo13 v WT metaphase I polo sites
-# rbind(merge(spo13_polo_NC_df %>%
-#                 select(Proteins.Standard.Name,polo_box_motif),
-#             spo13_polo_DECR_df %>%
-#                 select(Proteins.Standard.Name,polo_box_motif), 
-#             by="Proteins.Standard.Name",all=T) %>%
-#           replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
-#           rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
-#           rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
-#           rename_with(~gsub("polo_motif_number_","",.x)) %>%
-#           filter(!(is.finite(polo_box_motif_NC)&is.finite(polo_box_motif_DECR))) %>% # only phospho-prot that are UNIQUE in each group
-#           filter(is.finite(polo_box_motif_DECR)) %>%
-#           group_by(polo_box_motif_DECR) %>%
-#           summarize(n=n()) %>%
-#           mutate(perc=(n/sum(n))*100) %>%
-#           mutate(group="DECR") %>%
-#           rename(polo=polo_box_motif_DECR),
-#       merge(spo13_polo_NC_df %>%
-#                 select(Proteins.Standard.Name,polo_box_motif),
-#             spo13_polo_DECR_df %>%
-#                 select(Proteins.Standard.Name,polo_box_motif), 
-#             by="Proteins.Standard.Name",all=T) %>%
-#           replace(.=="NULL", NA) %>%# replace NULL with NA -- still don't really understand why NULLs vs NA are produced in the merge...
-#           rename_with(~ gsub(".x", "_NC", .x, fixed = TRUE)) %>%
-#           rename_with(~ gsub(".y", "_DECR", .x, fixed = TRUE)) %>%
-#           rename_with(~gsub("polo_motif_number_","",.x)) %>%
-#           filter(!(is.finite(polo_box_motif_NC)&is.finite(polo_box_motif_DECR))) %>% # only phospho-prot that are UNIQUE in each group
-#           filter(is.finite(polo_box_motif_NC)) %>%
-#           group_by(polo_box_motif_NC) %>%
-#           summarize(n=n()) %>%
-#           mutate(perc=(n/sum(n))*100) %>%
-#           mutate(group="NC") %>%
-#           rename(polo=polo_box_motif_NC)) %>%
-#     mutate(sample_group=as.character(interaction(polo,group))) %>%
-#     filter(grepl("TRUE",sample_group)) %>%
-#     mutate(group=factor(group,levels=c("NC","DECR"))) %>%
-#     ggplot(aes(y=perc,x=group,fill=group))+
-#     geom_bar(stat="identity")+
-#     theme_classic()+
-#     theme(axis.text=element_text(angle=90),legend.position="none")+
-#     labs(x="",y="percent with S[ST]P motif",title="spo13 v WT metaphase I polo phospho-proteins")+
-#     scale_y_continuous(expand=expansion(mult=c(0,0.2))) # 20% more plot area after max value
-# 
-
