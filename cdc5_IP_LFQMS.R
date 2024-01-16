@@ -10,9 +10,9 @@ library("DEP")
 
 # 
 # # # load the tables
-# protg<-read.delim("/Users/lkoch/Lori MS RStudio/2401_Cdc5_IP/proteinGroups.txt")
+# protg<-read.delim("cdc5_IP_proteinGroups.txt")
 # 
-# phos<-read.delim("/Users/lkoch/Lori MS RStudio/2401_Cdc5_IP/Phospho (STY)Sites.txt")
+# phos<-read.delim("cdc5_IP_Phospho (STY)Sites.txt")
 # 
 # # remove rev/con
 # 
@@ -20,7 +20,7 @@ library("DEP")
 # protg <- subset(protg, Reverse != "+" & Potential.contaminant != "+")
 # 
 # # Add Gene.name cols #
-# gene.map.table <-read.csv("/Users/lkoch/Lori MS RStudio/Reference dataframes/Yeast_Uniprot2.csv")
+# gene.map.table <-read.csv("Yeast_Uniprot2.csv")
 # 
 # #data prep so there isn't white space and only the first gene name is in the gene column
 # 
@@ -160,13 +160,13 @@ library("DEP")
 # DO NOT RUN AGAIN #####
 
 # LOAD PREVIOUS RESULTS OF THE SCRIPT
-data_results<-readRDS("240111_protein.RDS")
+data_results<-readRDS("cdc5_IP_protein.RDS")
 
-phos_results<-readRDS("240111_phospho.RDS")
+phos_results<-readRDS("cdc5_IP_phospho.RDS")
 
-dep<-readRDS("240111_DEP_protein.RDS")
+dep<-readRDS("cdc5_IP_DEP_protein.RDS")
 
-phos_dep<-readRDS("240111_DEP_phospho.RDS")
+phos_dep<-readRDS("cdc5_IP_DEP_phospho.RDS")
 
 # Number of significant proteins
 data_results %>% filter(significant) %>% nrow()#50 significantly varying prots
