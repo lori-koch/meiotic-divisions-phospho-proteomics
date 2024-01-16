@@ -6225,6 +6225,10 @@ WT_all_DEN.STLIMYFG_line<-total_intensity_lineplot_one_strain(WT.phos.fin.df,"WT
 spo13_all_DEN.STLIMYFG_line<-total_intensity_lineplot_one_strain(spo13.phos.fin.df,"spo13",".............[DEN].[ST][LIMYFG]..............","spo13 all [DEN].[ST]*[LIMYFG]","#F8766D")
 WT_spo13_all_DEN.STLIMYFG_line<-total_intensity_lineplot_two_strains(WT.spo13.phos.fin.df,".............[DEN].[ST][LIMYFG]..............","WT and spo13 [DEN].[ST]*[LIMYFG]")
 
+WT_all_DEN.STLIMYF_line<-total_intensity_lineplot_one_strain(WT.phos.fin.df,"WT",".............[DEN].[ST][LIMYF]..............","WT all [DEN].[ST]*[LIMYF]","#00BFC4")
+spo13_all_DEN.STLIMYF_line<-total_intensity_lineplot_one_strain(spo13.phos.fin.df,"spo13",".............[DEN].[ST][LIMYF]..............","spo13 all [DEN].[ST]*[LIMYF]","#F8766D")
+WT_spo13_all_DEN.STLIMYF_line<-total_intensity_lineplot_two_strains(WT.spo13.phos.fin.df,".............[DEN].[ST][LIMYF]..............","WT and spo13 [DEN].[ST]*[LIMYF]")
+
 # WT_all_DEN.STLIM_line<-total_intensity_lineplot_one_strain(WT.phos.fin.df,"WT",".............[DEN].[ST][LIM]..............","WT all [DEN].[ST][LIM]","#00BFC4")
 # spo13_all_DEN.STLIM_line<-total_intensity_lineplot_one_strain(spo13.phos.fin.df,"spo13",".............[DEN].[ST][LIM]..............","spo13 all [DEN].[ST][LIM]","#F8766D")
 # WT_spo13_all_DEN.STLIM_line<-total_intensity_lineplot_two_strains(WT.spo13.phos.fin.df,".............[DEN].[ST][LIM]..............","WT and spo13 [DEN].[ST][LIM]")
@@ -6249,6 +6253,8 @@ print_plot(WT_all_DEN.STLIMYF_line+spo13_all_DEN.STLIMYF_line+WT_spo13_all_DEN.S
 "TC_WT_spo13_all_DEN.STLIMYF_line.pdf",20,5)
 print_plot(WT_all_DEN.STLIMYFG_line+spo13_all_DEN.STLIMYFG_line+WT_spo13_all_DEN.STLIMYFG_line,
 "TC_WT_spo13_all_DEN.STLIMYFG_line.pdf",20,5)
+print_plot(WT_all_DEN.STLIMYF_line+spo13_all_DEN.STLIMYF_line+WT_spo13_all_DEN.STLIMYF_line,
+"TC_WT_spo13_all_DEN.STLIMYF_line.pdf",20,5)
 # print_plot(WT_all_DEN.STLIM_line+spo13_all_DEN.STLIM_line+WT_spo13_all_DEN.STLIM_line,
 # "TC_WT_spo13_all_DEN.STLIM_line.pdf",15,4)
 
@@ -6303,6 +6309,73 @@ print_plot((WT_spo13_kinase_lineplots[[1]]+WT_spo13_kinase_lineplots[[2]]+WT_spo
 
 
 ```
+
+# Basophilic motif lineplots for supp figure
+```{r}
+
+# Ipl1/PKA motif as part of the 12 set RKx[ST]
+WT_spo13_all_RKxST_line<-total_intensity_lineplot_two_strains(WT.spo13.phos.fin.df,"............RK.[ST]...............","WT and spo13 RK.[ST]*")
+
+# Rxx[ST]
+WT_spo13_all_RxxST_line<-total_intensity_lineplot_two_strains(WT.spo13.phos.fin.df,"............R..[ST]...............","WT and spo13 R..[ST]*")
+
+# Rx[ST]
+WT_spo13_all_RxST_line<-total_intensity_lineplot_two_strains(WT.spo13.phos.fin.df,"............R.[ST]...............","WT and spo13 R.[ST]*")
+
+print_plot(WT_spo13_all_RKxST_line+WT_spo13_all_RxxST_line+WT_spo13_all_RxST_line,
+"TC_WT_spo13_all_basophilic_line.pdf",20,5)
+
+# [RK]xx[ST]
+WT_spo13_all_RKxxST_line<-total_intensity_lineplot_two_strains(WT.spo13.phos.fin.df,"............[RK]..[ST]...............","WT and spo13 [RK]..[ST]*")
+
+# [RK]x[ST]
+WT_spo13_all_RKxST_line<-total_intensity_lineplot_two_strains(WT.spo13.phos.fin.df,"............[RK].[ST]...............","WT and spo13 [RK].[ST]*")
+
+print_plot(WT_spo13_all_RKxxST_line+WT_spo13_all_RKxST_line+WT_spo13_all_RKxST_line,
+"TC_WT_spo13_all_basophilic_line_2.pdf",20,5)
+
+
+
+```
+
+# Motif of WTvspo13 cluster 9
+```{r}
+
+WT_spo13_sigdiff_cluster_9_logo<-short_logo(WT.spo13.phos.fin.df.sigdiff %>% filter(ward.cluster==9),"prob","WT v spo13 cluster 9, n=")
+
+print_plot(WT_spo13_sigdiff_cluster_9_logo+WT_spo13_sigdiff_cluster_9_logo+WT_spo13_sigdiff_cluster_9_logo,
+           "sigdiff_phos_cluster_9_logo.pdf",12,3)
+
+# choose a selected site to highlight for reviewer
+# WT.spo13.phos.fin.df.sigdiff %>% filter(ward.cluster==9) %>%
+#     select(gene.name_site,Sequence.window)
+# FAR11-S-210 cell cycle autophagy
+# KIN28-T-162 autophagy
+# HRR25-S-330 cross talk between Cdc5 and Hrr25 found by Stefan
+
+
+    
+sigdiff_cluster_9_sel_sites<-WT.spo13.phos.fin.df.sigdiff %>%
+  filter(gene.name_site %in% c("FAR11-S-210","KIN28-T-162","HRR25-S-330")) %>%
+  select(Gene.name,gene.name_site,WT.spo13.scaled.mean.cols) %>%
+  pivot_longer(-c(Gene.name,gene.name_site),names_to="time",values_to="intensity",names_prefix="scaled.both.") %>%
+mutate(strain=ifelse(grepl("WT",time),"WT","spo13")) %>%
+    mutate(time=gsub("WT.mean.|spo13.mean.","",time)) %>%
+  ggplot(aes(x=fct_inorder(time),y=intensity,group=interaction(strain,gene.name_site)))+
+    facet_wrap(~gene.name_site,scales="free_y")+
+  geom_line(aes(color=strain))+
+  theme_classic()+
+    scale_y_continuous(labels=label_number(accuracy=0.1))+
+   theme(axis.text.x = element_text(angle=90,vjust=0.6,size=rel(1.5)),axis.text.y=element_text(size=rel(1.5)),plot.title=element_text(size=rel(1.5)),legend.title=element_text(size=rel(1.5)),legend.text=element_text(size=rel(1.5)),axis.title=element_text(size=rel(1.5)),strip.text=element_text(size=rel(1)))+
+  labs(x="time",y="scaled intensity",title="")
+
+print_plot(sigdiff_cluster_9_sel_sites,
+           "sigdiff_cluster_9_sel_sites.pdf",12,3)
+
+
+```
+
+
 
 # WT phos cluster enrichment of DEN v DENxSTF
 ```{r}
@@ -6540,6 +6613,179 @@ print_plot(total_WT_timecourse_perc_matches,
 
 print_plot(sig_WT_timecourse_perc_matches,
            "sig_WT_timecourse_perc_matches.pdf",6,4)
+
+```
+
+# export datasets for shiny
+
+```{r}
+# export datasets for quicker access for plotting in sshiny app
+
+write.xlsx(WT.protg.fin.df,file="WT_protg.xlsx")
+write.xlsx(WT.phos.fin.df,file="WT_phos.xlsx")
+write.xlsx(WT.spo13.protg.fin.df,file="WT_spo13_protg.xlsx")
+write.xlsx(WT.spo13.phos.fin.df,file="WT_spo13_phos.xlsx")
+
+```
+
+
+# S[ST] motif analysis
+```{r}
+
+# export results table for cross analysis
+write.csv(WT.spo13.phos.fin.df,"WT_spo13_timecourse_phos.csv")
+
+# # export lists of gene names of proteins that are differentially phos
+# # in WT vs spo13
+# # WT v spo13 timecourse sigdiff sites by category
+WT.spo13.phos.fin.df %>%
+    group_by(sigdiff.sig.cat) %>%
+    mutate(id=row_number()) %>%
+    pivot_wider(names_from=sigdiff.sig.cat,values_from=Gene.name,id_cols=id) %>%
+    select(-id) %>%
+    #rename_with(~paste0("cluster_",.x,recycle0=T)) %>%
+    write.xlsx(.,"WT_spo13_phos_sigdiff_sigcat_ids_gene_names.xlsx")
+
+# new function that will print the numbers on the barplot
+fisher_barplot_counts<-function(df1,df2,motif,subset1,subset2,title){
+    out_df<-fisher(df1,df2,motif) %>%
+    tail(1) %>%
+     mutate(stars=ifelse(pval<0.001,"***",
+                      ifelse(pval<0.01,"**",
+                             ifelse(pval<0.05,"*",NA)))) %>%
+    select(df1,df2,pval,stars) %>%
+    pivot_longer(-c(pval,stars),values_to="perc",names_to="sample") %>%
+    mutate(sample=ifelse(grepl("df1",sample),subset1,subset2)) %>%
+        mutate(sample=factor(sample,levels=c(subset1,subset2))) # have to make sure levels are consistent
+    
+    ratios<-fisher(df1,df2,motif) %>%
+        rbind(ratio=paste0(.[1,],"/",.[3,])) %>%
+        tail(1) %>%
+        select(df1,df2) %>%
+        pivot_longer(cols=c(df1,df2),names_to="set",values_to="ratio") %>%
+        select(ratio)
+    
+    out_df<-out_df %>%
+        cbind(ratios)
+        
+    out_df %>%
+    ggplot(aes(x=sample,y=perc,fill=sample))+
+    geom_bar(aes(fill=sample),stat="identity")+
+        geom_text(aes(label=ratio),vjust=2)+
+   geom_signif(comparisons = list(c(subset1,subset2)),
+              map_signif_level=TRUE,
+              annotations = out_df$stars[1],
+              size=0.25)+
+    scale_y_continuous(expand=expansion(mult=c(0,0.2)),labels = label_number(accuracy=0.1))+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle=90,vjust=0.6),legend.position="none",axis.text=element_text(size=rel(1)))+
+    labs(y="percent matches",x="",title=title,,axis.line=element_line(linewidth=0.1))
+}
+
+# lists of proteins that have a sig DECR phos on a [DEN]x[ST] site in spo13
+spo13_WT_polo_prots<-WT.spo13.phos.fin.df %>%
+    filter(sigdiff.sig.cat=="sigdiff_spo13_DECR") %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    distinct(Gene.name) %>% unlist() %>% unname()
+
+# fish bar
+# of all DECR v NC sites
+spo13_WT_SSTP_DECR_v_NC_fish_bar_count<-fisher_barplot_counts(WT.spo13.phos.fin.df %>% filter(sigdiff.sig.cat=="NC"),WT.spo13.phos.fin.df %>% filter(sigdiff.sig.cat=="sigdiff_spo13_DECR"),"..............S[ST]P..............","NC","DECR","S[ST]*P sites")
+
+spo13_WT_SST_DECR_v_NC_fish_bar_count<-fisher_barplot_counts(WT.spo13.phos.fin.df %>% filter(sigdiff.sig.cat=="NC"),WT.spo13.phos.fin.df %>% filter(sigdiff.sig.cat=="sigdiff_spo13_DECR"),"..............S[ST]...............","NC","DECR","S[ST]* sites")
+
+# of DECR v NC sites on proteins that had a sig decr polo phos in spo13
+spo13_WT_polo_SSTP_DECR_v_NC_fish_bar_count<-fisher_barplot_counts(WT.spo13.phos.fin.df %>%
+    filter(Gene.name %in% spo13_WT_polo_prots) %>% filter(sigdiff.sig.cat=="NC"),WT.spo13.phos.fin.df %>% filter(Gene.name %in% spo13_WT_polo_prots) %>% filter(sigdiff.sig.cat=="sigdiff_spo13_DECR"),"..............S[ST]P..............","NC","DECR","Polo prot S[ST]*P sites")
+
+spo13_WT_polo_SST_DECR_v_NC_fish_bar_count<-fisher_barplot_counts(WT.spo13.phos.fin.df %>% filter(Gene.name %in% spo13_WT_polo_prots) %>% filter(sigdiff.sig.cat=="NC"),WT.spo13.phos.fin.df %>% filter(Gene.name %in% spo13_WT_polo_prots) %>% filter(sigdiff.sig.cat=="sigdiff_spo13_DECR"),"..............S[ST]...............","NC","DECR","Polo prot S[ST]* sites")
+
+print_plot(spo13_WT_SSTP_DECR_v_NC_fish_bar_count+spo13_WT_SST_DECR_v_NC_fish_bar_count+spo13_WT_polo_SSTP_DECR_v_NC_fish_bar_count+spo13_WT_polo_SST_DECR_v_NC_fish_bar_count,"TC_SSTP_fisher_barplot_counts.pdf",8,13)
+
+```
+
+# when are baso motifs increased in spo13 timecourse
+```{r}
+
+
+# 86 sites in Figure 4 that are INCR in spo13 and enriched for Rxx[ST]*
+# 
+# all sites that are INCR in spo13
+new1<-WT.spo13.phos.fin.df %>%
+    filter(sigdiff.sig.cat=="sigdiff_spo13_INCR") %>%
+    select(gene.name_site,sigdiff.sig.cat,WT.spo13.sig.cols) %>%
+    mutate(time_first_spo13_incr=apply(.[,WT.spo13.sig.cols],1,function(x) which(x=="DECR")[1])) %>%
+    mutate(new=alltimes[time_first_spo13_incr]) %>%
+    #mutate(new=as.character(new)) %>%
+    select(gene.name_site,new) %>%
+    ggplot(aes(x=fct_inseq(new)))+
+    geom_histogram(stat="count")+
+    labs(x="time",y="count",title="Sites that are INCR in spo13, n=86")+
+    theme_classic()+
+scale_y_continuous(expand=expansion(mult=c(0,0.2)))+ # 20% more plot area after max value
+    theme(axis.text=element_text(size=rel(1.5)),axis.title=element_text(size=rel(1.5)),title=element_text(size=rel(1.5)),legend.position="none",
+          strip.text=element_text(size=rel(1.5)))
+
+# only sites that are INCR in spo13 AND matching Rxx[ST]*
+new2<-WT.spo13.phos.fin.df %>%
+    filter(sigdiff.sig.cat=="sigdiff_spo13_INCR") %>%
+    filter(grepl("............[R]..[ST]...............",Sequence.window)) %>%
+    select(gene.name_site,sigdiff.sig.cat,WT.spo13.sig.cols) %>%
+    mutate(time_first_spo13_incr=apply(.[,WT.spo13.sig.cols],1,function(x) which(x=="DECR")[1])) %>%
+    mutate(new=alltimes[time_first_spo13_incr]) %>%
+    #mutate(new=as.character(new)) %>%
+    select(gene.name_site,new) %>%
+    group_by(new) %>%
+    summarize(n=n()) %>%
+    rbind(.,c(75,0))%>%
+    ggplot(aes(x=fct_inseq(new),y=n))+
+    geom_bar(stat="identity")+
+    labs(x="time",y="count",title="Rxx[ST]* sites that are INCR in spo13, n=20")+
+    theme_classic()+
+    scale_y_continuous(expand=expansion(mult=c(0,0.2)))+ # 20% more plot area after max value
+    theme(axis.text=element_text(size=rel(1.5)),axis.title=element_text(size=rel(1.5)),title=element_text(size=rel(1.5)),legend.position="none",
+          strip.text=element_text(size=rel(1.5)))
+
+print_plot(new1,"baso_incr_spo13.pdf",8,6)
+print_plot(new2,"baso_RxxST_incr_spo13.pdf",8,6)
+
+# when are decreased sites decr 
+new3<-WT.spo13.phos.fin.df %>%
+    filter(sigdiff.sig.cat=="sigdiff_spo13_DECR") %>%
+    select(gene.name_site,sigdiff.sig.cat,WT.spo13.sig.cols) %>%
+    mutate(time_first_spo13_incr=apply(.[,WT.spo13.sig.cols],1,function(x) which(x=="INCR")[1])) %>%
+    mutate(new=alltimes[time_first_spo13_incr]) %>%
+    #mutate(new=as.character(new)) %>%
+    select(gene.name_site,new) %>%
+    ggplot(aes(x=fct_inseq(new)))+
+    geom_histogram(stat="count")+
+    labs(x="time",y="count",title="Sites that are DECR in spo13, n=203")+
+    theme_classic()+
+scale_y_continuous(expand=expansion(mult=c(0,0.2)))+ # 20% more plot area after max value
+    theme(axis.text=element_text(size=rel(1.5)),axis.title=element_text(size=rel(1.5)),title=element_text(size=rel(1.5)),legend.position="none",
+          strip.text=element_text(size=rel(1.5)))
+
+new4<-WT.spo13.phos.fin.df %>%
+    filter(sigdiff.sig.cat=="sigdiff_spo13_DECR") %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    select(gene.name_site,sigdiff.sig.cat,WT.spo13.sig.cols) %>%
+    mutate(time_first_spo13_incr=apply(.[,WT.spo13.sig.cols],1,function(x) which(x=="INCR")[1])) %>%
+    mutate(new=alltimes[time_first_spo13_incr]) %>%
+    #mutate(new=as.character(new)) %>%
+    select(gene.name_site,new) %>%
+    group_by(new) %>%
+    summarize(n=n()) %>%
+    rbind(.,c(75,0))%>%
+    ggplot(aes(x=fct_inseq(new),y=n))+
+    geom_bar(stat="identity")+
+    labs(x="time",y="count",title="[DEN]x[ST]* sites that are DECR in spo13, n=65")+
+    theme_classic()+
+    scale_y_continuous(expand=expansion(mult=c(0,0.2)),breaks=pretty_breaks())+ # 20% more plot area after max value
+    theme(axis.text=element_text(size=rel(1.5)),axis.title=element_text(size=rel(1.5)),title=element_text(size=rel(1.5)),legend.position="none",
+          strip.text=element_text(size=rel(1.5)))
+
+print_plot(new3,"when_decr_spo13.pdf",8,6)
+print_plot(new4,"when_DENxST_decr_spo13.pdf",8,6)
 
 ```
 
