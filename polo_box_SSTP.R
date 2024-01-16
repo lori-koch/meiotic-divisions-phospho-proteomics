@@ -15,12 +15,11 @@
 library(dplyr)
 library(clipr)
 
-setwd("/Users/lkoch/Documents/Github scripts/polo_box/SSTP")
-getwd()
-
-# read in results table from metaphase arrest experiment
-Exp40E_phos<-read.csv("/Users/lkoch/Documents/Github scripts/metaphase script/Exp40E_phos.csv")
-TC_phos<-read.csv("/Users/lkoch/Documents/Github scripts/2023 paper/meiotic-divisions-phospho-proteomics/WT_spo13_timecourse_phos.csv")
+# read in results table from metaphase arrest (exp40e)
+# and timecourse experiment 
+# these csvs are produced by their respective R scripts
+Exp40E_phos<-read.csv("Exp40E_phos.csv")
+TC_phos<-read.csv("WT_spo13_timecourse_phos.csv")
 
 # need to edit gene name so it matches SGD
 Exp40E_phos<-Exp40E_phos %>%
@@ -137,19 +136,19 @@ Exp40E_phos<-Exp40E_phos %>%
 #     unname() %>% write_clip() #n=414
 
 # retrieve and read in list of protein sequences from YeastMine
-spo13_DECR_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/Exp40_DECR_spo13.tsv")
-spo13_polo_DECR_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/Exp40_DECR_polo_spo13.tsv")
-spo13m2_DECR_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/Exp40_DECR_spo13m2.tsv")
-spo13m2_polo_DECR_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/Exp40_DECR_polo_spo13m2.tsv")
-TC_spo13_DECR_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/TC_DECR_spo13.tsv")
-TC_spo13_polo_DECR_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/TC_DECR_polo_spo13.tsv")
+spo13_DECR_df<-read.delim("Exp40_DECR_spo13.tsv")
+spo13_polo_DECR_df<-read.delim("Exp40_DECR_polo_spo13.tsv")
+spo13m2_DECR_df<-read.delim("Exp40_DECR_spo13m2.tsv")
+spo13m2_polo_DECR_df<-read.delim("Exp40_DECR_polo_spo13m2.tsv")
+TC_spo13_DECR_df<-read.delim("TC_DECR_spo13.tsv")
+TC_spo13_polo_DECR_df<-read.delim("TC_DECR_polo_spo13.tsv")
 
-spo13_NC_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/Exp40_NC_spo13.tsv",quote = "" )
-spo13_polo_NC_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/Exp40_NC_polo_spo13.tsv",quote = "" )
-spo13m2_NC_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/Exp40_NC_spo13m2.tsv",quote = "" )
-spo13m2_polo_NC_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/Exp40_NC_polo_spo13m2.tsv",quote = "" )
-TC_spo13_NC_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/TC_NC_spo13.tsv",quote = "" )
-TC_spo13_polo_NC_df<-read.delim("/Users/lkoch/Documents/Github scripts/polo_box/polo_box/TC_NC_polo_spo13.tsv",quote = "" )
+spo13_NC_df<-read.delim("Exp40_NC_spo13.tsv",quote = "" )
+spo13_polo_NC_df<-read.delim("Exp40_NC_polo_spo13.tsv",quote = "" )
+spo13m2_NC_df<-read.delim("Exp40_NC_spo13m2.tsv",quote = "" )
+spo13m2_polo_NC_df<-read.delim("Exp40_NC_polo_spo13m2.tsv",quote = "" )
+TC_spo13_NC_df<-read.delim("TC_NC_spo13.tsv",quote = "" )
+TC_spo13_polo_NC_df<-read.delim("TC_NC_polo_spo13.tsv",quote = "" )
 
 # trim long column names
 colnames(spo13_DECR_df)<-gsub("Gene...","",colnames(spo13_DECR_df))
