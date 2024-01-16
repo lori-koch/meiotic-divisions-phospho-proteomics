@@ -50,9 +50,9 @@ dev.off()
 #Read data tables #####
 #Files have all datasets included
 
-phosphos <- read.delim("/Users/lkoch/Documents/Github scripts/meiotic timecourse input files/meiotic_timecourse_Phospho (STY)Sites.txt")
+phosphos <- read.delim("meiotic_timecourse_Phospho (STY)Sites.txt")
 
-protg <- read.delim("/Users/lkoch/Documents/Github scripts/meiotic timecourse input files/meiotic_timecourse_proteinGroups.txt")
+protg <- read.delim("meiotic_timecourse_proteinGroups.txt")
 
 
 ```
@@ -122,7 +122,7 @@ phosphos[,reporter.cols] <- phosphos[,phos.TMT.cols]
 #I downloaded this file from https://www.uniprot.org/docs/yeast
 #I modified the original file so it only includes the table and not the heading part at the top
 
-gene.map.table <-read.csv("/Users/lkoch/Lori MS RStudio/Reference dataframes/Yeast_Uniprot2.csv")
+gene.map.table <-read.csv("Yeast_Uniprot2.csv")
 
 #data prep so there isn't white space and only the first gene name is in the gene column
 gene.map.table$Gene<-trimws(gene.map.table$Gene, "right")

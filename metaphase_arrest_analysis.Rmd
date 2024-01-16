@@ -53,9 +53,9 @@ dev.off()
 ```{r,echo=F,message=F,warning=F}
 #Read data tables #####
 
-phosphos <- read.delim("/Users/lkoch/Documents/Github scripts/metaphase arrest input files/metaphase_arrest_Phospho (STY)Sites.txt")
+phosphos <- read.delim("metaphase_arrest_Phospho (STY)Sites.txt")
 
-protg <- read.delim("/Users/lkoch/Documents/Github scripts/metaphase arrest input files/metaphase_arrest_proteinGroups.txt")
+protg <- read.delim("metaphase_arrest_proteinGroups.txt")
 
 ```
 
@@ -107,7 +107,7 @@ phosphos[,raw_cols]<-phosphos[,phosphos_reporter_cols]
 #I downloaded this file from https://www.uniprot.org/docs/yeast
 #I modified the original file so it only includes the table and not the heading part at the top
 
-gene.map.table <-read.csv("/Users/lkoch/Lori MS RStudio/Reference dataframes/Yeast_Uniprot2.csv")
+gene.map.table <-read.csv("Yeast_Uniprot2.csv")
 
 #data prep so there isn't white space and only the first gene name is in the gene column
 gene.map.table$Gene<-trimws(gene.map.table$Gene, "right")
