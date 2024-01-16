@@ -146,18 +146,12 @@ library("DEP")
 # 
 # phos_results <-get_results(phos_dep)
 # 
-# # Number of significant proteins
-# data_results %>% filter(significant) %>% nrow()#88 significantly varying prots
-# 
-# phos_results %>% filter(significant) %>% nrow()#58 significantly varying sites
-# 
 # # run once after initial run
-# saveRDS(data_results,"240111_protein.RDS") # save small results table
-# saveRDS(phos_results,"240111_phospho.RDS") # save small results table
-# saveRDS(dep,"240111_DEP_protein.RDS") # save large results table ## IMPORTANT!! for plotting.
-# saveRDS(phos_dep,"240111_DEP_phospho.RDS") # save large results table
+# saveRDS(data_results,"cdc5_IP_protein.RDS") # save small results table
+# saveRDS(phos_results,"cdc5_IP_phospho.RDS") # save small results table
+# saveRDS(dep,"cdc5_IP_DEP_protein.RDS") # save large results table ## IMPORTANT!! for plotting.
+# saveRDS(phos_dep,"cdc5_IP_DEP_phospho.RDS") # save large results table
 
-# DO NOT RUN AGAIN #####
 
 # LOAD PREVIOUS RESULTS OF THE SCRIPT
 data_results<-readRDS("cdc5_IP_protein.RDS")
@@ -169,9 +163,9 @@ dep<-readRDS("cdc5_IP_DEP_protein.RDS")
 phos_dep<-readRDS("cdc5_IP_DEP_phospho.RDS")
 
 # Number of significant proteins
-data_results %>% filter(significant) %>% nrow()#50 significantly varying prots
+data_results %>% filter(significant) %>% nrow()
 
-phos_results %>% filter(significant) %>% nrow()#34 significantly varying sites
+phos_results %>% filter(significant) %>% nrow()
 
 # Generate a wide data.frame of all of the data
 df_wide <- get_df_wide(dep)
