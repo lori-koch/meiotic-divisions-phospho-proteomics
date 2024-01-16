@@ -1506,41 +1506,38 @@ spo13_spo13m2_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% fi
 print_plot(spo13_WT_RK..ST_INCR_v_NC_fish_bar+spo13m2_WT_RK..ST_INCR_v_NC_fish_bar+spo13_spo13m2_RK..ST_INCR_v_NC_fish_bar,
            "RK..ST_fisher_INCR_v_NC_barplot.pdf",13,8)
 
+# RK at -3 and -2
+spo13_WT_RKRK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="INCR"),"............[RK][RK].[ST]...............","spo13_WT_NC","spo13_WT_INCR","spo13 v WT [RK][RK].[ST]* sites")
+spo13m2_WT_RKRK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="INCR"),"............[RK][RK].[ST]...............","spo13m2_WT_NC","spo13m2_WT_INCR","spo13m2 v WT [RK][RK].[ST]* sites")
+spo13_spo13m2_RKRK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR"),"............[RK][RK].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_INCR","spo13 v spo13m2 [RK][RK].[ST]* sites")
 
-# 
-# # DEPLETION OF BASOPHILIC MOTIFS AMONG SIG INCR SITES
-# # INCR v NC #####
-# # [RK].ST
-# WT_spo13_RK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
-#                                                      filter(WT_spo13_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13_sig=="INCR"),".............[RK].[ST]...............","WT_spo13_NC","WT_spo13_INCR","WT v spo13 [RK].[ST] sites")
-# WT_spo13m2_RK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
-#                                                      filter(WT_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13m2_sig=="INCR"),".............[RK].[ST]...............","WT_spo13m2_NC","WT_spo13m2_INCR","WT v spo13m2 [RK].[ST] sites")
-# spo13_spo13m2_RK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
-#                                                      filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR"),".............[RK].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_INCR","spo13 v spo13m2 [RK].[ST] sites")
-# 
-# print_plot(WT_spo13_RK.ST_INCR_v_NC_fish_bar+WT_spo13m2_RK.ST_INCR_v_NC_fish_bar+spo13_spo13m2_RK.ST_INCR_v_NC_fish_bar,
-#            "RK.ST_fisher_INCR_v_NC_barplot.pdf",13,8)
-# 
-# # [RK]..ST
-# WT_spo13_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
-#                                                      filter(WT_spo13_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13_sig=="INCR"),"............[RK]..[ST]...............","WT_spo13_NC","WT_spo13_INCR","WT v spo13 [RK]..[ST] sites")
-# WT_spo13m2_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
-#                                                      filter(WT_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13m2_sig=="INCR"),"............[RK]..[ST]...............","WT_spo13m2_NC","WT_spo13m2_INCR","WT v spo13m2 [RK]..[ST] sites")
-# spo13_spo13m2_RK..ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
-#                                                      filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR"),"............[RK]..[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_INCR","spo13 v spo13m2 [RK]..[ST] sites")
-# 
-# print_plot(WT_spo13_RK..ST_INCR_v_NC_fish_bar+WT_spo13m2_RK..ST_INCR_v_NC_fish_bar+spo13_spo13m2_RK..ST_INCR_v_NC_fish_bar,
-#            "RK..ST_fisher_INCR_v_NC_barplot.pdf",13,8)
-# 
-# # RKRK.ST motif
-# WT_spo13_RKRK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(WT_spo13_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13_sig=="INCR"),"............[RK][RK].[ST]...............","WT_spo13_NC","WT_spo13_INCR","WT v spo13 [RK][RK].[ST] sites")
-# WT_spo13m2_RKRK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
-#                                                          filter(WT_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(WT_spo13m2_sig=="INCR"),"............[RK][RK].[ST]...............","WT_spo13m2_NC","WT_spo13m2_INCR","WT v spo13m2 [RK][RK].[ST] sites")
-# spo13_spo13m2_RKRK.ST_INCR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="INCR"),"............[RK][RK].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_INCR","spo13 v spo13m2 [RK][RK].[ST] sites")
-# 
-# print_plot(WT_spo13_RKRK.ST_INCR_v_NC_fish_bar+WT_spo13m2_RKRK.ST_INCR_v_NC_fish_bar+spo13_spo13m2_RKRK.ST_INCR_v_NC_fish_bar,
-#            "RKRK.ST_fisher_INCR_v_NC_barplot.pdf",13,8)
+print_plot(spo13_WT_RKRK.ST_INCR_v_NC_fish_bar+spo13m2_WT_RKRK.ST_INCR_v_NC_fish_bar+spo13_spo13m2_RKRK.ST_INCR_v_NC_fish_bar,
+           "RKRK.ST_fisher_INCR_v_NC_barplot.pdf",13,8)
 
+# depletion of RK among decreased sites
+# RK at -2
+spo13_WT_RK.ST_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),".............[RK].[ST]...............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [RK].[ST]* sites")
+spo13m2_WT_RK.ST_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),".............[RK].[ST]...............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [RK].[ST]* sites")
+spo13_spo13m2_RK.ST_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),".............[RK].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [RK].[ST]* sites")
+
+print_plot(spo13_WT_RK.ST_DECR_v_NC_fish_bar+spo13m2_WT_RK.ST_DECR_v_NC_fish_bar+spo13_spo13m2_RK.ST_DECR_v_NC_fish_bar,
+           "RK.ST_fisher_DECR_v_NC_barplot.pdf",13,8)
+                                                  
+# RK at -3
+spo13_WT_RK..ST_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),"............[RK]..[ST]...............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [RK]..[ST]* sites")
+spo13m2_WT_RK..ST_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),"............[RK]..[ST]...............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [RK]..[ST]* sites")
+spo13_spo13m2_RK..ST_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),"............[RK]..[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [RK]..[ST]* sites")
+
+print_plot(spo13_WT_RK..ST_DECR_v_NC_fish_bar+spo13m2_WT_RK..ST_DECR_v_NC_fish_bar+spo13_spo13m2_RK..ST_DECR_v_NC_fish_bar,
+           "RK..ST_fisher_DECR_v_NC_barplot.pdf",13,8)
+
+# RK at -3 and -2
+spo13_WT_RKRK.ST_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),"............[RK][RK].[ST]...............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [RK][RK].[ST]* sites")
+spo13m2_WT_RKRK.ST_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),"............[RK][RK].[ST]...............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [RK][RK].[ST]* sites")
+spo13_spo13m2_RKRK.ST_DECR_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc%>% filter(spo13_spo13m2_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_spo13m2_sig=="DECR"),"............[RK][RK].[ST]...............","spo13_spo13m2_NC","spo13_spo13m2_DECR","spo13 v spo13m2 [RK][RK].[ST]* sites")
+
+print_plot(spo13_WT_RKRK.ST_DECR_v_NC_fish_bar+spo13m2_WT_RKRK.ST_DECR_v_NC_fish_bar+spo13_spo13m2_RKRK.ST_DECR_v_NC_fish_bar,
+           "RKRK.ST_fisher_DECR_v_NC_barplot.pdf",13,8)
 
 ```
 
@@ -1628,6 +1625,13 @@ phosphos_3reps_loc %>%
 
 # below first set of DECR v NC icelogos
 print_plot(spo13_WT_DEN_DECR_v_NC_fish_bar+spo13m2_WT_DEN_DECR_v_NC_fish_bar+spo13_WT_SP_DECR_v_NC_fish_bar+spo13m2_WT_SP_DECR_v_NC_fish_bar,"main_fig_fisher_DECR_v_NC_barplot.pdf",8,13)
+
+# basophilic motifs
+# DECR v NC
+print_plot(spo13_WT_RK..ST_DECR_v_NC_fish_bar+spo13m2_WT_RK..ST_DECR_v_NC_fish_bar+spo13_WT_RK.ST_DECR_v_NC_fish_bar+spo13m2_WT_RK.ST_DECR_v_NC_fish_bar,"main_fig_fisher_basophil_DECR_v_NC_barplot.pdf",8,13)
+
+# INCR v NC
+print_plot(spo13_WT_RK..ST_INCR_v_NC_fish_bar+spo13m2_WT_RK..ST_INCR_v_NC_fish_bar+spo13_WT_RK.ST_INCR_v_NC_fish_bar+spo13m2_WT_RK.ST_INCR_v_NC_fish_bar,"main_fig_fisher_basophil_INCR_v_NC_barplot.pdf",8,13)
 
 # below canonical Polo sub-motif logos
 print_plot(spo13_WT_DEN.STF_DECR_v_NC_fish_bar+spo13m2_WT_DEN.STF_DECR_v_NC_fish_bar+spo13_WT_DEN.STG_DECR_v_NC_fish_bar+spo13m2_WT_DEN.STG_DECR_v_NC_fish_bar,"main_fig_sub_DEN_fisher_DECR_v_NC_barplot.pdf",8,13)
@@ -2336,6 +2340,179 @@ print_plot(WT_spo13_KRKR.ST_sigcat_barplot+WT_spo13m2_KRKR.ST_sigcat_barplot+spo
            "KRKR.ST_sigcat_barplot.pdf",13,4)
 
 ```
+
+# Number sigdiff S[ST]P sites barplot
+```{r,echo=F,message=F,warning=F}
+
+# barplots of countss (no fisher test)
+
+WT_spo13_SSTP_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"..............S[ST]P..............","spo13_WT_sig","S[ST]*P phospho-sites WT v spo13")
+WT_spo13m2_SSTP_sigcat_barplot<-motif_sigcat_numbers_barplot(phosphos_3reps_loc,"..............S[ST]P..............","spo13m2_WT_sig","S[ST]*P phospho-sites WT v spo13m2")
+spo13_spo13m2_SSTP_sigcat_barplot<-phosphos_3reps_loc %>%
+    filter(grepl("..............S[ST]P..............",Sequence.window)) %>% 
+    group_by(spo13_spo13m2_sig) %>%
+    summarize(n=n()) %>%
+    rbind(c("INCR","0")) %>%
+    mutate(spo13_spo13m2_sig=factor(spo13_spo13m2_sig,levels=c("DECR","INCR","NC"))) %>%
+    mutate(n=as.numeric(n)) %>%
+    ggplot(aes(spo13_spo13m2_sig,y=n,fill=spo13_spo13m2_sig))+
+    geom_bar(aes(fill=spo13_spo13m2_sig),stat="identity")+
+    geom_text(aes(label=n),vjust=-1)+
+        scale_y_continuous(expand=expansion(mult=c(0,0.2)))+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle=90,vjust=0.6),legend.position="none",axis.line=element_line(linewidth=0.25))+
+    labs(y="number of of sites",x="",title="S[ST]P phospho-sites spo13 v spo13m2")
+
+
+print_plot(WT_spo13_SSTP_sigcat_barplot+WT_spo13m2_SSTP_sigcat_barplot+spo13_spo13m2_SSTP_sigcat_barplot,
+           "SSTP_sigcat_barplot.pdf",13,4)
+
+# fish bar
+spo13_WT_SSTP_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),"..............S[ST]P..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT S[ST]*P sites")
+spo13m2_WT_SSTP_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),"..............S[ST]P..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT S[ST]*P sites")
+spo13_WT_SSTP_polo_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="DECR"),"..............S[ST]P..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT polo [DEN]S[ST]*P sites")
+spo13m2_WT_SSTP_polo_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="DECR"),"..............S[ST]P..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [DEN]S[ST]*P sites")
+
+print_plot(spo13_WT_SSTP_sig_v_NC_fish_bar+spo13m2_WT_SSTP_sig_v_NC_fish_bar+spo13_WT_SSTP_polo_sig_v_NC_fish_bar+spo13m2_WT_SSTP_polo_sig_v_NC_fish_bar,"SSTP_fisher_barplot.pdf",8,13)
+
+
+# S[ST] sites
+spo13_WT_SST_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),"..............S[ST]...............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT S[ST]* sites")
+spo13m2_WT_SST_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),"..............S[ST]...............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT S[ST]* sites")
+spo13_WT_SST_polo_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="DECR"),"..............S[ST]...............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT polo [DEN]S[ST]* sites")
+spo13m2_WT_SST_polo_sig_v_NC_fish_bar<-fisher_barplot(phosphos_3reps_loc %>%
+filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="DECR"),"..............S[ST]...............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [DEN]S[ST]* sites")
+
+print_plot(spo13_WT_SST_sig_v_NC_fish_bar+spo13m2_WT_SST_sig_v_NC_fish_bar+spo13_WT_SST_polo_sig_v_NC_fish_bar+spo13m2_WT_SST_polo_sig_v_NC_fish_bar,"SST_fisher_barplot.pdf",8,13)
+
+# new function that will print the numbers on the barplot
+fisher_barplot_counts<-function(df1,df2,motif,subset1,subset2,title){
+    out_df<-fisher(df1,df2,motif) %>%
+    tail(1) %>%
+     mutate(stars=ifelse(pval<0.001,"***",
+                      ifelse(pval<0.01,"**",
+                             ifelse(pval<0.05,"*",NA)))) %>%
+    select(df1,df2,pval,stars) %>%
+    pivot_longer(-c(pval,stars),values_to="perc",names_to="sample") %>%
+    mutate(sample=ifelse(grepl("df1",sample),subset1,subset2)) %>%
+        mutate(sample=factor(sample,levels=c(subset1,subset2))) # have to make sure levels are consistent
+    
+    ratios<-fisher(df1,df2,motif) %>%
+        rbind(ratio=paste0(.[1,],"/",.[3,])) %>%
+        tail(1) %>%
+        select(df1,df2) %>%
+        pivot_longer(cols=c(df1,df2),names_to="set",values_to="ratio") %>%
+        select(ratio)
+    
+    out_df<-out_df %>%
+        cbind(ratios)
+        
+    out_df %>%
+    ggplot(aes(x=sample,y=perc,fill=sample))+
+    geom_bar(aes(fill=sample),stat="identity")+
+        geom_text(aes(label=ratio),vjust=2)+
+   geom_signif(comparisons = list(c(subset1,subset2)),
+              map_signif_level=TRUE,
+              annotations = out_df$stars[1],
+              size=0.25)+
+    scale_y_continuous(expand=expansion(mult=c(0,0.2)),labels = label_number(accuracy=0.1))+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle=90,vjust=0.6),legend.position="none",axis.text=element_text(size=rel(1)))+
+    labs(y="percent matches",x="",title=title,,axis.line=element_line(linewidth=0.1))
+}
+
+# fish bar
+spo13_WT_SSTP_sig_v_NC_fish_bar_count<-fisher_barplot_counts(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),"..............S[ST]P..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT S[ST]*P sites")
+spo13m2_WT_SSTP_sig_v_NC_fish_bar_count<-fisher_barplot_counts(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),"..............S[ST]P..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT S[ST]*P sites")
+spo13_WT_SSTP_polo_sig_v_NC_fish_bar_count<-fisher_barplot_counts(phosphos_3reps_loc %>%
+filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="DECR"),"..............S[ST]P..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [DEN]S[ST]*P sites")
+spo13m2_WT_SSTP_polo_sig_v_NC_fish_bar_count<-fisher_barplot_counts(phosphos_3reps_loc %>%
+filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="DECR"),"..............S[ST]P..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [DEN]S[ST]*P sites")
+
+print_plot(spo13_WT_SSTP_sig_v_NC_fish_bar_count+spo13m2_WT_SSTP_sig_v_NC_fish_bar_count+spo13_WT_SSTP_polo_sig_v_NC_fish_bar_count+spo13m2_WT_SSTP_polo_sig_v_NC_fish_bar_count,"SSTP_fisher_barplot_counts.pdf",8,13)
+
+
+# S[ST] sites
+spo13_WT_SST_sig_v_NC_fish_bar_count<-fisher_barplot_counts(phosphos_3reps_loc %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13_WT_sig=="DECR"),"..............S[ST]...............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT S[ST]* sites")
+spo13m2_WT_SST_sig_v_NC_fish_bar_count<-fisher_barplot_counts(phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>% filter(spo13m2_WT_sig=="DECR"),"..............S[ST]...............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT S[ST]* sites")
+spo13_WT_SST_polo_sig_v_NC_fish_bar_count<-fisher_barplot_counts(phosphos_3reps_loc %>%
+filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13_WT_sig=="DECR"),"..............S[ST]...............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT [DEN]S[ST]* sites")
+spo13m2_WT_SST_polo_sig_v_NC_fish_bar_count<-fisher_barplot_counts(phosphos_3reps_loc %>%
+filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>% filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    filter(spo13m2_WT_sig=="DECR"),"..............S[ST]...............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT [DEN]S[ST]* sites")
+
+print_plot(spo13_WT_SST_sig_v_NC_fish_bar_count+spo13m2_WT_SST_sig_v_NC_fish_bar_count+spo13_WT_SST_polo_sig_v_NC_fish_bar_count+spo13m2_WT_SST_polo_sig_v_NC_fish_bar_count,"SST_fisher_barplot_counts.pdf",8,13)
+
+
+
+# of the proteinss that have a stat sig polo site decr in spo13,
+# how many also have an SSTP phosphosite (on any site -- not the same ssite as above)
+
+# lists of protein names that have one sig decr polo site in spo13 or spo13m2
+spo13_WT_polo_prots<-phosphos_3reps_loc %>%
+    filter(spo13_WT_sig=="DECR") %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    distinct(Gene.name) %>% unlist() %>% unname()
+
+spo13m2_WT_polo_prots<-phosphos_3reps_loc %>%
+    filter(spo13m2_WT_sig=="DECR") %>%
+    filter(grepl(".............[DEN].[ST]...............",Sequence.window)) %>%
+    distinct(Gene.name) %>% unlist() %>% unname()
+
+# S[ST]P motif fisher test
+# spo13 v WT
+spo13_WT_polo_prot_SSTP_fish_bar_counts<-fisher_barplot_counts(phosphos_3reps_loc %>%
+    filter(Gene.name %in% spo13_WT_polo_prots) %>% 
+    filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(Gene.name %in% spo13_WT_polo_prots) %>%
+    filter(spo13_WT_sig=="DECR"),"..............S[ST]P..............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT S[ST]*P sites among DECR polo phos prots")
+
+#spo13m2 v WT
+spo13m2_WT_polo_prot_SSTP_fish_bar_counts<-fisher_barplot_counts(phosphos_3reps_loc %>%
+    filter(Gene.name %in% spo13m2_WT_polo_prots) %>% 
+    filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(Gene.name %in% spo13m2_WT_polo_prots) %>%
+    filter(spo13m2_WT_sig=="DECR"),"..............S[ST]P..............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT S[ST]*P sites among DECR polo phos prots")
+
+# S[ST] motif
+ # spo13 v WT
+spo13_WT_polo_prot_SST_fish_bar_counts<-fisher_barplot_counts(phosphos_3reps_loc %>%
+    filter(Gene.name %in% spo13_WT_polo_prots) %>% 
+    filter(spo13_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(Gene.name %in% spo13_WT_polo_prots) %>%
+    filter(spo13_WT_sig=="DECR"),"..............S[ST]...............","spo13_WT_NC","spo13_WT_DECR","spo13 v WT S[ST]* sites among DECR polo phos prots")
+
+#spo13m2 v WT
+spo13m2_WT_polo_prot_SST_fish_bar_counts<-fisher_barplot_counts(phosphos_3reps_loc %>%
+    filter(Gene.name %in% spo13m2_WT_polo_prots) %>% 
+    filter(spo13m2_WT_sig=="NC"),phosphos_3reps_loc %>%
+    filter(Gene.name %in% spo13m2_WT_polo_prots) %>%
+    filter(spo13m2_WT_sig=="DECR"),"..............S[ST]...............","spo13m2_WT_NC","spo13m2_WT_DECR","spo13m2 v WT S[ST]* sites among DECR polo phos prots")
+
+print_plot(spo13_WT_polo_prot_SSTP_fish_bar_counts+spo13m2_WT_polo_prot_SSTP_fish_bar_counts+spo13_WT_polo_prot_SST_fish_bar_counts+spo13m2_WT_polo_prot_SST_fish_bar_counts,"polo_prot_SST_fisher_barplot_counts.pdf",8,13)
+
+
+```
+
+
 
 # export sigcat ids
 
